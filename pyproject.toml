@@ -1,0 +1,37 @@
+[tool.poetry]
+name = "astro-bot"
+version = "0.1.0"
+description = ""
+authors = ["AurunChill <aurunchill@yandex.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+flatlib = "^0.2.3"
+apscheduler = "^3.10.4"
+python-dotenv = "^1.0.1"
+pydantic-settings = "^2.6.1"
+aiogram = "^3.14.0"
+pytest = "^8.3.3"
+pytest-asyncio = "^0.24.0"
+babel = "^2.16.0"
+sqlalchemy = "^2.0.36"
+psycopg2 = "^2.9.10"
+alembic = "^1.14.0"
+aiosqlite = "^0.20.0"
+openai = "^1.54.3"
+requests = "^2.32.3"
+timezonefinder = "^6.5.4"
+asyncpg = "^0.30.0"
+geopy = "^2.4.1"
+yandex-geocoder = "^3.0.1"
+sqladmin = "^0.20.1"
+uvicorn = "^0.32.0"
+fastapi = "^0.115.5"
+itsdangerous = "^2.2.0"
+gunicorn = "^23.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

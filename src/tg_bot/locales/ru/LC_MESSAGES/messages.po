@@ -1,0 +1,286 @@
+# Common buttons
+msgid "menu_msg"
+msgstr "<b>📋 Выберите опцию меню!</b>"
+
+msgid "horoscope_btn"
+msgstr "🔮 Гороскоп"
+
+msgid "event_btn"
+msgstr "📅 События"
+
+msgid "profile_btn"
+msgstr "👤 Профиль"
+
+msgid "help_btn"
+msgstr "❓ Помощь"
+
+msgid "decline_btn"
+msgstr "❌ Отмена"
+
+msgid "declined_msg"
+msgstr "<b>❌ Команда отменена!</b>\n\nВы можете выбрать другую опцию или попробовать снова."
+
+msgid "freely_unavailable_msg"
+msgstr "<b>Полная версия недоступна!</b>\n\nИзмените статус аккаунта, воспользуйтесь командой <i>/profile</i> и выберите опцию \"Изменить статус 👑\""
+
+msgid "user_not_found_msg"
+msgstr "<b>👀 Пользователь не найден!</b>\n\nПожалуйста, воспользуйтесь командой <i>/start</i> для начала работы с ботом."
+
+msgid "not_registered"
+msgstr "<b>Вы не зарегистрированы!</b>\n\nПожалуйста, используйте команду <i>/register</i>, чтобы создать аккаунт и продолжить."
+
+msgid "wait_calc_msg"
+msgstr "<b>Производим расчет! ⌛</b>\n\nПожалуйста, подождите, это может занять некоторое время..."
+
+# Base messages and Keyboard's buttons
+msgid "start_msg"
+msgstr "<b>Добро пожаловать в мир астрологии!</b> ✨\n\nЭтот бот поможет вам рассчитать гороскоп и узнать важные даты и события, которые произойдут в вашей жизни. Просто укажите дату, время и место рождения, и мы произведем астрологический расчет для вас!\n\n<b>Пусть звезды ведут вас!</b> 🌟"
+
+msgid "help_msg"
+msgstr "<b>📋 Вот список доступных команд:</b>\n\n<i>/help</i> - посмотреть доступные команды\n<i>/lang</i> - поменять язык\n<i>/profile</i> - редактировать данные профиля\n<i>/horoscope</i> - рассчитать энергию дня или месяца\n<i>/events</i> - рассчитать события и их даты\n<i>/sub</i> - изменить статус аккаунта\n\n<i>/menu</i> - вернуться в главное меню\n<i>/admin</i> - получить ссылку админ-панели"
+
+msgid "lang_msg"
+msgstr "<b>Выберите язык 🌐</b>\n\nВыберите язык общения с ботом для дальнейшей работы."
+
+msgid "russian_btn"
+msgstr "Россия 🇷🇺"
+
+msgid "english_btn"
+msgstr "English 🇬🇧"
+
+msgid "lang_changed_msg"
+msgstr "<b>Язык изменен на русский! 🇷🇺</b>"
+
+msgid "not_admin_msg"
+msgstr "<b>Вы не являетесь администратором!</b>"
+
+msgid "admin_panel_msg"
+msgstr "Панель админа 💻"
+
+# Profile messages and Keyboard's buttons
+msgid "profile_title_msg"
+msgstr "<b>Имя:</b>"
+
+msgid "profile_birth_msg"
+msgstr "<b>Дата и время рождения:</b>"
+
+msgid "profile_birth_location_msg"
+msgstr "<b>Место рождения:</b>"
+
+msgid "profile_location_msg"
+msgstr "<b>Местоположение:</b>"
+
+msgid "location_not_found_msg"
+msgstr "<i>Локация не определена</i>\n\nПроверьте настройки геолокации и попробуйте снова."
+
+msgid "location_error_msg"
+msgstr "<i>Ошибка определения локации</i>\n\nПожалуйста, попробуйте отправить локацию еще раз."
+
+msgid "max_profiles_msg"
+msgstr "<b>❌ Вы уже создали максимальное количество профилей (3) на один аккаунт!</b>\n\nВы можете удалить один из существующих профилей перед созданием нового."
+
+msgid "send_prof_name_msg"
+msgstr "✨ <b>Отправьте имя</b>\n\nНапример: <i>Инокентий Аркадьевич</i>"
+
+msgid "prof_name_err_msg"
+msgstr "⚠️ <b>Ошибка!</b>\n\nПопробуйте ввести имя еще раз!"
+
+msgid "send_birth_date_msg"
+msgstr "🎉🎂 <b>Отправьте дату рождения</b>\n\nНапример: <i>20.12.2004</i>"
+
+msgid "birth_date_err_msg"
+msgstr "⚠️ <b>Ошибка!</b>\n\nПопробуйте ввести дату рождения еще раз, в правильном формате."
+
+msgid "send_birth_time_msg"
+msgstr "🕒 <b>Отправьте время рождения</b>\n\nНапример: <i>00:23</i>. По умолчанию: <i>00:00</i>"
+
+msgid "birth_time_err_msg"
+msgstr "⚠️ <b>Ошибка!</b>\n\nПожалуйста, введите время рождения снова, убедитесь, что оно корректное."
+
+msgid "send_birth_location_msg"
+msgstr "📍 <b>Отправьте название места вашего рождения. Например: Россия, г. Москва</b>"
+
+msgid "birth_location_err_msg"
+msgstr "⚠️ <b>Ошибка!</b>\n\nПожалуйста, отправьте название места вашего рождения, чтобы мы могли правильно рассчитать ваш гороскоп."
+
+msgid "send_current_location_msg"
+msgstr "🌍 <b>Пожалуйста, отправьте геолокацию вашего текущего расположения</b>"
+
+msgid "current_location_err_msg"
+msgstr "⚠️ <b>Ошибка!</b>\n\nПожалуйста, отправьте геолокацию вашего текущего расположения, чтобы мы могли обновить информацию."
+
+msgid "new_profile_msg"
+msgstr "🎉 <b>Новый профиль успешно создан!</b>\n\nВоспользуйтесь командой <i>/profile</i>"
+
+msgid "error_setting_current_profile_msg"
+msgstr "<b>Ошибка создания профиля! ❌ </b>\n\nПопробуйте еще раз!"
+
+msgid "add_profile_msg"
+msgstr "✨ <b>Новый профиль добавлен!</b>\n\nВоспользуйтесь командой <i>/profile</i>"
+
+msgid "share_location_btn"
+msgstr "📍 Поделиться местоположением"
+
+# Profile handler messages
+msgid "change_profile_btn"
+msgstr "🔄 Поменять профиль"
+
+msgid "change_data_btn"
+msgstr "🔧 Изменить данные"
+
+msgid "delete_profile_btn"
+msgstr "🗑️ Удалить профиль"
+
+msgid "change_subscription_btn"
+msgstr "👑 Изменить статус"
+
+msgid "choose_profile_msg"
+msgstr "🔍 Выберите <b>существующий</b> профиль или создайте <b>новый</b>"
+
+msgid "add_profile_btn"
+msgstr "➕ Добавить профиль"
+
+msgid "profile_changed_msg"
+msgstr "<b>Профиль успешно изменен! ✅ </b>\n\nВы можете продолжать использовать команду <i>/profile</i> для управления вашим профилем."
+
+msgid "profile_deleted_changed_msg"
+msgstr "<b>Профиль удален! 🗑️ </b>\n\nДругой профиль стал основным. Вы можете редактировать его через команду <i>/profile</i>."
+
+msgid "profile_deleted_new_msg"
+msgstr "<b>Профиль удален! 🗑️ </b>\n\nПожалуйста, создайте новый профиль с помощью команды <i>/register</i>."
+
+msgid "prefer_to_change_msg"
+msgstr "Что вы хотите изменить в своем профиле? 🔧"
+
+msgid "profile_change_title_btn"
+msgstr "✏️ Имя"
+
+msgid "profile_change_birth_date_btn"
+msgstr "🎂 Дата рождения"
+
+msgid "profile_change_birth_time_btn"
+msgstr "🕒 Время рождения"
+
+msgid "profile_change_birth_location_btn"
+msgstr "📍 Место рождения"
+
+msgid "profile_change_location_btn"
+msgstr "📌 Местоположение"
+
+msgid "title_changed_msg"
+msgstr "<b>Имя изменено! ✏️ </b>\n\nТеперь ваш профиль будет отображаться под обновленным именем."
+
+msgid "birth_date_changed_msg"
+msgstr "<b>Дата рождения изменена! 🎂 </b>\n\nУчтите, что это может повлиять на ваши астрологические расчеты."
+
+msgid "birth_time_changed_msg"
+msgstr "<b>Время рождения изменено! 🕒</b>\n\nПожалуйста, убедитесь, что новое время задано корректно."
+
+msgid "birth_location_changed_msg"
+msgstr "<b>Место рождения изменено! 📍</b>\n\nВаши астрологические расчеты будут обновлены с учетом нового места."
+
+msgid "current_location_changed_msg"
+msgstr "<b>Местоположение изменено! 📌</b>\n\nЭто поможет нам предоставить более актуальные рекомендации."
+
+# Horoscope handler
+msgid "create_horoscope_option_msg"
+msgstr "<b>Выберите период для расчета гороскопа! 🔮 </b>\n\nВыберите нужный вариант для получения прогноза."
+
+msgid "today_btn"
+msgstr "📅 Сегодня"
+
+msgid "month_btn"
+msgstr "📆 Месяц"
+
+msgid "date_btn"
+msgstr "📅 Дату"
+
+msgid "mail_btn"
+msgstr "📧 Рассылка"
+
+msgid "ask_date_msg"
+msgstr "📅 Введите дату. Пример: <i>20.12.2024</i>"
+
+msgid "date_error_msg"
+msgstr "<b>Ошибка! ⚠️</b>\n\nПожалуйста, введите дату еще раз в правильном формате, чтобы мы могли рассчитать гороскоп."
+
+msgid "mail_subscribed_msg"
+msgstr "<b>🌟 Дорогие подписчики! 🌟</b>\n\nСпасибо, что присоединились к нашему гороскоп-каналу! Мы рады приветствовать Вас в нашем обществе звездных искателей. Каждое утро в <i>7:00</i> Вы будете получать свежие прогнозы, которые помогут Вам сделать Ваш день ярче и успешнее!\n\n<b>Пусть звезды ведут Вас к новым вершинам! ✨</b>\n\nС любовью, <i>{}</i>"
+
+msgid "mail_unsubscribe_msg"
+msgstr "<b>Вы отписаны от ежедневной рассылки! ❌</b>\n\nВы можете подписаться снова, чтобы получать ежедневные прогнозы в <i>7:00 по МСК</i>!"
+
+msgid "mail_subscribe_btn"
+msgstr "Подписаться ✅"
+
+msgid "mail_unsubscribe_btn"
+msgstr "Отписаться ❌"
+
+# Events handler
+msgid "wanna_date_msg"
+msgstr "📅 Хочешь узнать дату событий?"
+
+msgid "event_study_btn"
+msgstr "📚 Учеба"
+
+msgid "event_mood_btn"
+msgstr "😊 Настроение"
+
+msgid "event_love_btn"
+msgstr "❤️ Любовь"
+
+msgid "event_income_btn"
+msgstr "💰 Доходы"
+
+msgid "event_success_btn"
+msgstr "🏆 Успехи"
+
+msgid "choose_duration_msg"
+msgstr "⌛ Выберите промежуток времени:"
+
+msgid "event_duration_45_btn"
+msgstr "📆 45 дней"
+
+msgid "event_duration_90_btn"
+msgstr "📆 90 дней"
+
+msgid "event_duration_180_btn"
+msgstr "📆 180 дней"
+
+msgid "event_duration_365_btn"
+msgstr "📆 365 дней"
+
+msgid "subscribed_forever_msg"
+msgstr "<b>Вы уже подписаны навсегда!</b> 🎉"
+
+msgid "subscirbed_montly_msg"
+msgstr "<b>Вы уже подписаны на месяц!🎉</b>"
+
+msgid "subscription_expiration_msg"
+msgstr "<b>Подписка оплачена на месяц!</b> ⏳\n\nСрок истечения: <i>{}</i>\n\nНе забудьте продлить, чтобы не потерять доступ!"
+
+msgid "no_subscription_msg"
+msgstr "<b>Вы не подписаны! ❌</b>\n\nПодписка открывает доступ к <b>полным</b> расчетам (гороскоп, события) и позволяет получать прогнозы на более продолжительные сроки в разделе \"События\".\n\nВыберите опцию для оформления подписки и наслаждайтесь всеми преимуществами! 💳"
+
+msgid "sub_month_btn"
+msgstr "🗓️ Месяц"
+
+msgid "sub_forever_btn"
+msgstr "♾️ Навсегда"
+
+msgid "sub_month_msg"
+msgstr "📅 Подписка на месяц"
+
+msgid "sub_forever_msg"
+msgstr "♾️ Подписка навсегда"
+
+msgid "sub_description_msg"
+msgstr "Подписка открывает доступ к полным расчетам и добавляет опции выбора "180 дней" и "365 дней" в категории \"📅 События\""
+
+msgid "sub_success_msg"
+msgstr "<b>Подписка оформлена! 🎉</b>\n\nТеперь у вас есть доступ ко всем полным расчетам. Пользуйтесь на здоровье! 💖"
+
+
+# Background handlers
+msgid "subscription_expired_msg"
+msgstr "<b>Истёк срок подписки! ⏳</b>\n\nВы можете продлить подписку <i>/sub</i>"
