@@ -5,7 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.base import Base
-from database.db import engine
+from database.db import engine, async_session_maker  # Используем async_session_maker
 
 from bot_ import bot, dispatcher
 from server.main import app
@@ -16,20 +16,26 @@ from handlers.background.subscription import check_subscription
 from middleware import register_middlewares
 from config import settings
 from logger import bot_logger
+from database.user.service import add_admin  # Исправленный импорт
 
 async def init_db():
+    """Initialize the database by creating all tables."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(lambda sync_conn: Base.metadata.create_all(bind=sync_conn))
     bot_logger.info("Database tables created")
+
+async def on_startup():
+    """Run initialization tasks when the bot starts."""
+    await init_db()  # Создание таблиц
+    admin_id = settings.admin.ADMIN_IDS[0]  # Берем первый ID из списка
+    await add_admin(telegram_id=admin_id, username=settings.admin.ADMIN_USERNAME)  # Добавляем админа
 
 async def start_bot():
     bot_logger.info("Bot started")
     register_middlewares(dispatcher)
     dispatcher.include_routers(*all_routers)
     await bot.delete_webhook(drop_pending_updates=True)
-    await dispatcher.start_polling(
-        bot, allowed_updates=["message", "callback_query", "pre_checkout_query"]
-    )
+    await dispatcher.start_polling(bot, allowed_updates=["message", "callback_query", "pre_checkout_query"])
 
 async def start_server(host: str, port: int):
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
@@ -45,7 +51,7 @@ async def run_app():
 if __name__ == "__main__":
     scheduler = AsyncIOScheduler()
     moscow_timezone = pytz.timezone("Europe/Moscow")
-    scheduler.add_job(init_db)  # Добавляем создание таблиц
+    scheduler.add_job(on_startup)  # Заменили init_db на on_startup
     scheduler.add_job(run_app)
     scheduler.add_job(
         send_mailing, trigger=CronTrigger(hour=7, minute=0, timezone=moscow_timezone)

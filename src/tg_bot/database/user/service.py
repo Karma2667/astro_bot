@@ -1,11 +1,11 @@
 from sqlalchemy import select
 from typing import Optional, List
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.user.models import User
 from database.profile.models import Profile
 from logger import db_query_logger as logger
 from database.db import async_session_maker
-
 
 async def create_user(user: User) -> User:
     """Create a new user record."""
@@ -16,7 +16,6 @@ async def create_user(user: User) -> User:
         logger.info(f"User created: {user}")
         return user
 
-
 async def find_user_by_id(user_id: int) -> Optional[User]:
     """Find a user by their ID."""
     async with async_session_maker() as session:
@@ -26,7 +25,6 @@ async def find_user_by_id(user_id: int) -> Optional[User]:
         logger.info(f"User fetched by ID {user_id}: {user}")
         return user
 
-
 async def find_all_users() -> List[User]:
     """Retrieve all users."""
     async with async_session_maker() as session:
@@ -35,7 +33,6 @@ async def find_all_users() -> List[User]:
         users = result.scalars().all()
         logger.info(f"All users fetched: {users}")
         return users
-
 
 async def update_user(user_id: int, updated_user: User) -> Optional[User]:
     """Update a user's data dynamically without explicitly naming columns."""
@@ -57,7 +54,6 @@ async def update_user(user_id: int, updated_user: User) -> Optional[User]:
         logger.info(f"User updated: {existing_user}")
         return existing_user
 
-
 async def delete_user(user_id: int) -> Optional[User]:
     """Delete a user by their ID."""
     async with async_session_maker() as session:
@@ -74,21 +70,15 @@ async def delete_user(user_id: int) -> Optional[User]:
         logger.info(f"User deleted: {user}")
         return user
 
-
 async def set_current_profile(user_id: int, profile_id: int) -> Optional[User]:
     """Set the current profile ID for a user."""
     async with async_session_maker() as session:
-        # Ensure the profile belongs to the user
-        stmt = select(Profile).where(
-            Profile.id == profile_id, Profile.user_id == user_id
-        )
+        stmt = select(Profile).where(Profile.id == profile_id, Profile.user_id == user_id)
         result = await session.execute(stmt)
         profile = result.scalars().first()
 
         if not profile:
-            logger.warning(
-                f"Profile with ID {profile_id} does not belong to User {user_id}."
-            )
+            logger.warning(f"Profile with ID {profile_id} does not belong to User {user_id}.")
             return None
 
         stmt = select(User).where(User.user_id == user_id)
@@ -100,8 +90,35 @@ async def set_current_profile(user_id: int, profile_id: int) -> Optional[User]:
             return None
 
         user.current_profile_id = profile_id
-
         await session.commit()
         await session.refresh(user)
         logger.info(f"User {user_id} current_profile_id set to {profile_id}.")
+        return user
+
+async def add_admin(telegram_id: int, username: str = None, locale: str = "ru") -> User:
+    """Add or update an admin user in the database."""
+    async with async_session_maker() as session:
+        # Проверяем, существует ли пользователь
+        stmt = select(User).where(User.user_id == telegram_id)
+        result = await session.execute(stmt)
+        existing_user = result.scalars().first()
+
+        if existing_user and existing_user.is_admin:
+            logger.info(f"Admin with Telegram ID {telegram_id} already exists.")
+            return existing_user
+
+        # Создаем или обновляем пользователя
+        user = existing_user or User(
+            user_id=telegram_id,
+            name=username or f"Admin_{telegram_id}",
+            locale=locale,
+            is_admin=True,
+            subscription=User.subscription.property.columns[0].default.arg,  # По умолчанию FREELY
+            is_mail_subscribed=True
+        )
+        if not existing_user:
+            session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        logger.info(f"Admin added/updated - Telegram ID: {telegram_id}, Name: {user.name}")
         return user

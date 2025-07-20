@@ -2,31 +2,29 @@ from sqlalchemy import (
     Enum as SAEnum,
     DateTime,
     BigInteger,
-    String
+    String,
+    Boolean
 )
 from sqlalchemy.orm import Mapped, mapped_column
-
 from datetime import datetime
 from typing import Optional
 from enum import Enum
 
 from database.base import Base
 
-
 class Subscription(Enum):
     FOREVER = 'forever'
     MONTHLY = 'monthly'
     FREELY = 'freely'
 
-
 class User(Base):
-    __tablename__ = 'User'
+    __tablename__ = 'users'  # Исправлено на нижний регистр для конвенции PostgreSQL
 
     id: Mapped[BigInteger] = mapped_column(
         BigInteger, unique=True, index=True, nullable=False, primary_key=True, autoincrement=True
     )
 
-    user_id: Mapped[BigInteger] = mapped_column(
+    user_id: Mapped[Optional[BigInteger]] = mapped_column(
         BigInteger, unique=True, nullable=True
     )
 
@@ -39,9 +37,7 @@ class User(Base):
     )
 
     current_profile_id: Mapped[Optional[BigInteger]] = mapped_column(
-        BigInteger,
-        nullable=True,
-        unique=True,
+        BigInteger, nullable=True  # Убрал unique, если не требуется
     )
 
     subscription: Mapped[Subscription] = mapped_column(
@@ -56,8 +52,12 @@ class User(Base):
         nullable=False, default=True
     )
 
-    def __doc__(self):
-        return f'{self.__class__.__name__}({self.user_id})'
+    is_admin: Mapped[bool] = mapped_column(  # Добавлено поле is_admin
+        Boolean, nullable=False, default=False
+    )
 
-    def __str__(self):
-        return f'User({self.user_id})'
+    def __repr__(self):
+        """String representation of User for debugging."""
+        return f"User(user_id={self.user_id}, name={self.name}, is_admin={self.is_admin})"
+
+    __str__ = __repr__  # Используем __repr__ как __str__

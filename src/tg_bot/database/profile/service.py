@@ -6,7 +6,6 @@ from database.user.models import User
 from logger import db_query_logger as logger
 from database.db import async_session_maker
 
-
 async def create_profile(profile: Profile) -> Profile:
     """Create a new profile record."""
     async with async_session_maker() as session:
@@ -16,6 +15,15 @@ async def create_profile(profile: Profile) -> Profile:
         logger.info(f"Profile created: {profile}")
         return profile
 
+async def create_profile_by_user_id(user_id: int) -> Profile | None:  # Альтернатива
+    """Create a new profile for the given user with minimal data."""
+    async with async_session_maker() as session:
+        new_profile = Profile(user_id=user_id, title=f"Profile_{user_id}", birth_date=None, birth_time=None, birth_location_name=None, zodiac_sign=None)
+        session.add(new_profile)
+        await session.commit()
+        await session.refresh(new_profile)
+        logger.info(f"Profile created for user_id {user_id}: {new_profile.id}")
+        return new_profile
 
 async def find_profile_by_id(profile_id: int) -> Optional[Profile]:
     """Find a profile by its ID."""
@@ -26,7 +34,6 @@ async def find_profile_by_id(profile_id: int) -> Optional[Profile]:
         logger.info(f"Profile fetched by ID {profile_id}: {profile}")
         return profile
 
-
 async def find_profiles_by_user_id(user_id: int) -> List[Profile]:
     """Find all profiles associated with a user ID."""
     async with async_session_maker() as session:
@@ -35,7 +42,6 @@ async def find_profiles_by_user_id(user_id: int) -> List[Profile]:
         profiles = result.scalars().all()
         logger.info(f"Profiles fetched for user ID {user_id}: {profiles}")
         return profiles
-
 
 async def find_current_profile_by_user_id(user_id: int) -> Optional[Profile]:
     """Find the current profile associated with a user ID."""
@@ -49,7 +55,6 @@ async def find_current_profile_by_user_id(user_id: int) -> Optional[Profile]:
         profile = result.scalars().first()
         logger.info(f"Current profile fetched for user ID {user_id}: {profile}")
         return profile
-
 
 async def update_profile(
     profile_id: int, updated_profile: Profile
@@ -72,7 +77,6 @@ async def update_profile(
         await session.refresh(existing_profile)
         logger.info(f"Profile updated: {existing_profile}")
         return existing_profile
-
 
 async def delete_profile(profile_id: int) -> Optional[Profile]:
     """Delete a profile by its ID."""

@@ -1,6 +1,5 @@
 from sqlalchemy import (
     String,
-    Float,
     DateTime,
     Date,
     Time,
@@ -12,7 +11,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import date, time
 
 from database.base import Base
-
 
 class Profile(Base):
     __tablename__ = 'Profile'
@@ -37,7 +35,7 @@ class Profile(Base):
         Date, nullable=False
     )
 
-    birth_time: Mapped[Time] = mapped_column(
+    birth_time: Mapped[time] = mapped_column(
         Time, default=time(0, 0)
     )
 
@@ -45,20 +43,12 @@ class Profile(Base):
         String, nullable=True
     )
 
-    # location_latitude: Mapped[float] = mapped_column(
-    #     Float, nullable=False
-    # )
+    zodiac_sign: Mapped[str] = mapped_column(
+        String, nullable=True
+    )
 
-    # location_longitude: Mapped[float] = mapped_column(
-    #     Float, nullable=False
-    # )
-
-    # location_timezone: Mapped[str] = mapped_column(
-    #     String, nullable=False
-    # )
-
-    def __doc__(self):
-        return f'{self.__class__.__name__}({self.id})'
+    def __repr__(self):
+        return f'Profile(id={self.id}, user_id={self.user_id}, zodiac_sign={self.zodiac_sign})'
 
     def __str__(self):
         return f'Profile({self.id})'
