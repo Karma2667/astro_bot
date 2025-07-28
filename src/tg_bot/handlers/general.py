@@ -1,5 +1,6 @@
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.types import Message
+from aiogram.filters import StateFilter 
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.i18n import gettext as _
 
@@ -14,14 +15,14 @@ from filters.access import ProfileRegistered
 
 general_router = Router(name="general")
 
-
-@general_router.message()
+@general_router.message(StateFilter(None)) 
 async def handle_any_msg(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} sending message: {message.text}")
 
     # handle reply keyboard answers
     text = message.text
     if text:
+        # Проверки с вызовом ProfileRegistered и вызовы других команд остаются без изменений
         if text == _("horoscope_btn") and await ProfileRegistered()(
             message=message, state=state
         ):
@@ -41,4 +42,5 @@ async def handle_any_msg(message: Message, state: FSMContext):
             await handle_help_cmd(message=message, state=state)
             return
 
+    # Если ни одна из кнопок не распознана, показываем меню
     await handle_menu_cmd(message=message, state=state)

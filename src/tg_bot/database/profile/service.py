@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from database.profile.models import Profile
 from database.user.models import User
@@ -12,18 +12,8 @@ async def create_profile(profile: Profile) -> Profile:
         session.add(profile)
         await session.commit()
         await session.refresh(profile)
-        logger.info(f"Profile created: {profile}")
+        logger.info(f"Profile created: {profile.__dict__}") # Улучшенное логирование
         return profile
-
-async def create_profile_by_user_id(user_id: int) -> Profile | None:  # Альтернатива
-    """Create a new profile for the given user with minimal data."""
-    async with async_session_maker() as session:
-        new_profile = Profile(user_id=user_id, title=f"Profile_{user_id}", birth_date=None, birth_time=None, birth_location_name=None, zodiac_sign=None)
-        session.add(new_profile)
-        await session.commit()
-        await session.refresh(new_profile)
-        logger.info(f"Profile created for user_id {user_id}: {new_profile.id}")
-        return new_profile
 
 async def find_profile_by_id(profile_id: int) -> Optional[Profile]:
     """Find a profile by its ID."""
@@ -56,11 +46,15 @@ async def find_current_profile_by_user_id(user_id: int) -> Optional[Profile]:
         logger.info(f"Current profile fetched for user ID {user_id}: {profile}")
         return profile
 
-async def update_profile(
-    profile_id: int, updated_profile: Profile
-) -> Optional[Profile]:
-    """Update a profile's data dynamically without explicitly naming columns."""
+
+# === ГЛАВНОЕ ИСПРАВЛЕНИЕ: ПЕРЕПИСАННАЯ И НАДЕЖНАЯ ФУНКЦИЯ UPDATE_PROFILE ===
+async def update_profile(profile_id: int, update_data: Dict[str, Any]) -> Optional[Profile]:
+    """
+    Update a profile's data using a dictionary of changes.
+    This is much safer than passing a full object.
+    """
     async with async_session_maker() as session:
+        # 1. Получаем существующий профиль из базы
         stmt = select(Profile).where(Profile.id == profile_id)
         result = await session.execute(stmt)
         existing_profile = result.scalars().first()
@@ -69,14 +63,19 @@ async def update_profile(
             logger.warning(f"Profile with ID {profile_id} not found for update.")
             return None
 
-        for key, value in updated_profile.__dict__.items():
-            if key != "_sa_instance_state" and hasattr(Profile, key) and key != "id":
+        # 2. Применяем изменения из словаря
+        for key, value in update_data.items():
+            if hasattr(existing_profile, key):
                 setattr(existing_profile, key, value)
-
+            else:
+                logger.warning(f"Attempted to update non-existent attribute '{key}' on Profile.")
+        
+        # 3. Сохраняем и обновляем сессию
         await session.commit()
         await session.refresh(existing_profile)
-        logger.info(f"Profile updated: {existing_profile}")
+        logger.info(f"Profile updated: {existing_profile.__dict__}") # Улучшенное логирование
         return existing_profile
+
 
 async def delete_profile(profile_id: int) -> Optional[Profile]:
     """Delete a profile by its ID."""
@@ -89,7 +88,6 @@ async def delete_profile(profile_id: int) -> Optional[Profile]:
             logger.warning(f"Profile with ID {profile_id} not found for deletion.")
             return None
 
-        # Set current_profile_id to None for users who have this profile as current_profile_id
         stmt = select(User).where(User.current_profile_id == profile_id)
         result = await session.execute(stmt)
         users = result.scalars().all()

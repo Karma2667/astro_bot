@@ -67,7 +67,7 @@ async def handle_language_callback(callback: CallbackQuery, state: FSMContext):
             reply_markup=await get_language_inline(),
         )
     user.locale = language
-    await update_user(user_id=user_id, updated_user=user)
+    await update_user(user_id=user_id, update_data={"locale": language})
     await callback.message.answer(
         text=_("lang_changed_msg", locale=language),
         reply_markup=await get_menu_reply(locale=language),

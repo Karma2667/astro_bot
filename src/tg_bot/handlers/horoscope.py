@@ -51,6 +51,7 @@ async def make_horoscope(user_id: int, date: str) -> str:
     if not user_profile.zodiac_sign:
         return _("no_zodiac_msg")
 
+    # --- Логика определения recognition_str остается без изменений ---
     match date:
         case "today":
             recognition_str = datetime.today().strftime("%d.%m.%Y")
@@ -58,8 +59,8 @@ async def make_horoscope(user_id: int, date: str) -> str:
             recognition_str = datetime.today().strftime("%m.%Y")
         case _:
             recognition_str = date
-
     recognition_str = f'{recognition_str} {user.locale} {user_profile.id}'
+    
     db_horoscope = await find_prediction_by_recognition_and_type(
         recognition_str=recognition_str, prediction_type=PredictionType.HOROSCOPE
     )
@@ -72,9 +73,20 @@ async def make_horoscope(user_id: int, date: str) -> str:
     template = await load_template(
         locale=user.locale, template_type=TemplateType.HOROSCOPE
     )
+
+    # 1. Получаем системное имя знака из БД (например, "Aries")
+    zodiac_sign_key = user_profile.zodiac_sign.lower() # .lower() для надежности
+    
+    # 2. Переводим его, используя контекст i18n. 
+    #    Функция _() сама поймет, что у user.locale = 'ru' и возьмет нужный перевод.
+    translated_zodiac_sign = _(zodiac_sign_key)
+
+    # 3. Используем уже переведенное значение в промпте
     prompt = await inject_profile_into_template(
-        extra=f"зодиак {user_profile.zodiac_sign}, {date}", template=template, profile=user_profile
+        extra=f"зодиак {translated_zodiac_sign}, {date}", template=template, profile=user_profile
     )
+    # ---------------------------
+
     response = await send_gpt_request(prompt=prompt)
     
     if not response:
@@ -139,18 +151,21 @@ async def handle_date(message: Message, state: FSMContext):
     date_pattern = r"^\d{2}\.\d{2}\.\d{4}$"
     if message.text and re.match(date_pattern, message.text):
         try:
-            date = datetime.strptime(message.text, "%d.%m.%Y").date()
-            if date <= datetime.now().date():
-                wait_msg = await message.answer(text=_("wait_calc_msg"))
-                horoscope = await make_horoscope(user_id=message.from_user.id, date=message.text)
-                await wait_msg.delete()
-                await message.answer(text=horoscope, reply_markup=await get_menu_reply())
-                await state.clear()
-            else:
-                await message.answer(text=_("future_date_error_msg"), reply_markup=await get_decline_reply())
+            # Преобразование текста в дату остается для валидации
+            datetime.strptime(message.text, "%d.%m.%Y").date() 
+            
+            # Убрана проверка на будущую дату
+            wait_msg = await message.answer(text=_("wait_calc_msg"))
+            horoscope = await make_horoscope(user_id=message.from_user.id, date=message.text)
+            await wait_msg.delete()
+            await message.answer(text=horoscope, reply_markup=await get_menu_reply())
+            await state.clear()
+            
         except ValueError:
+            # Эта ошибка сработает, если дата некорректна, например, 32.12.2024
             await message.answer(text=_("date_error_msg"), reply_markup=await get_decline_reply())
     else:
+        # Эта ошибка сработает, если формат не ДД.ММ.ГГГГ
         await message.answer(text=_("date_error_msg"), reply_markup=await get_decline_reply())
 
 @horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.MAIL))

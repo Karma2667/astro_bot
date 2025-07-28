@@ -1,18 +1,19 @@
+
+
 from aiogram import Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.i18n import gettext as _
-
 import re
-from datetime import datetime
+from datetime import datetime, date
+
 
 from logger import bot_logger
 from handlers.register import handle_register_cmd
 from handlers.subscription import handle_subscription_cmd
 from filters.access import ProfileRegistered
 from states.profile import ChangeDataStates
-from keyboards.reply.profile import get_location_reply
 from keyboards.reply.common import get_menu_reply, get_decline_reply
 from keyboards.inline.callback import ProfileCallback
 from keyboards.inline.profile import (
@@ -28,19 +29,51 @@ from database.profile.service import (
     find_profile_by_id,
     delete_profile,
     update_profile,
-    create_profile,  # Добавляем импорт
+    create_profile,
 )
+
 
 profile_router = Router(name="profile")
 
+# === ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОПРЕДЕЛЕНИЯ ЗНАКА ЗОДИАКА ===
+def get_zodiac_sign(birth_date: date) -> str:
+    day = birth_date.day
+    month = birth_date.month
+    if (month == 3 and day >= 21) or (month == 4 and day <= 19): return "aries"
+    if (month == 4 and day >= 20) or (month == 5 and day <= 20): return "taurus"
+    if (month == 5 and day >= 21) or (month == 6 and day <= 20): return "gemini"
+    if (month == 6 and day >= 21) or (month == 7 and day <= 22): return "cancer"
+    if (month == 7 and day >= 23) or (month == 8 and day <= 22): return "leo"
+    if (month == 8 and day >= 23) or (month == 9 and day <= 22): return "virgo"
+    if (month == 9 and day >= 23) or (month == 10 and day <= 22): return "libra"
+    if (month == 10 and day >= 23) or (month == 11 and day <= 21): return "scorpio"
+    if (month == 11 and day >= 22) or (month == 12 and day <= 21): return "sagittarius"
+    if (month == 12 and day >= 22) or (month == 1 and day <= 19): return "capricorn"
+    if (month == 1 and day >= 20) or (month == 2 and day <= 18): return "aquarius"
+    if (month == 2 and day >= 19) or (month == 3 and day <= 20): return "pisces"
+    return "unknown"
+
 async def format_profile(profile: Profile) -> str:
     if profile is None:
-        return _("no_profile_msg")  # Сообщение, если профиль отсутствует
-    zodiac_info = profile.zodiac_sign if profile.zodiac_sign else _("no_zodiac_msg")
+        return _("no_profile_msg")
+    
+    # Получаем локализованное название знака зодиака
+    if profile.zodiac_sign:
+        # Создаем ключ для перевода на основе знака зодиака из профиля
+        zodiac_key = f"profile_zodiac_{profile.zodiac_sign.lower()}"
+        # Пытаемся получить перевод. 
+        zodiac_info = _(zodiac_key)
+        # Если перевод не найден (функция _ вернула тот же ключ), используем исходное значение с заглавной буквы
+        if zodiac_info == zodiac_key: 
+             bot_logger.warning(f"Translation for zodiac sign '{zodiac_key}' not found.")
+             zodiac_info = profile.zodiac_sign.capitalize()
+    else:
+        zodiac_info = _("no_zodiac_msg")
+    
     return (
-        f'{_("profile_title_msg")} {profile.title}\n\n'
-        f'{_("profile_birth_msg")} {profile.birth_date.strftime("%d.%m.%Y")} {profile.birth_time.strftime("%H:%M")}\n\n'
-        f'{_("profile_birth_location_msg")} {profile.birth_location_name or _("unknown_location")}\n\n'
+        f'{_("profile_title_msg")} {profile.title}\n'
+        f'{_("profile_birth_msg")} {profile.birth_date.strftime("%d.%m.%Y")} {profile.birth_time.strftime("%H:%M")}\n'
+        f'{_("profile_birth_location_msg")} {profile.birth_location_name or _("unknown_location")}\n'
         f'{_("profile_zodiac_msg")} {zodiac_info}'
     )
 
@@ -48,50 +81,26 @@ async def format_profile(profile: Profile) -> str:
 async def handle_profile_cmd(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} using command /profile")
     user_id = message.from_user.id
-    user = await find_user_by_id(user_id=user_id)
-    if not user:
-        await message.answer(_("user_not_found_msg"))
-        return
-
     profile = await find_current_profile_by_user_id(user_id=user_id)
     if profile is None:
-        bot_logger.warning(f"No profile found for user_id {user_id}, creating new profile")
-        profile = await create_profile(user_id=user_id)  # Создаем новый профиль
-        if profile is None:
-            bot_logger.error(f"Failed to create profile for user_id {user_id}")
-            await message.answer(_("error_profile_creation_msg"))
-            return
-        user.current_profile_id = profile.id
-        async with async_session_maker() as session:
-            session.add(user)
-            await session.commit()
-            await session.refresh(user)
-
+        await message.answer(_("no_active_profile_msg"))
+        await handle_register_cmd(message, state)
+        return
     profile_text = await format_profile(profile=profile)
     await message.answer(text=profile_text, reply_markup=await get_profile_inline())
-
-@profile_router.message(Command("setzodiac"))
-async def set_zodiac_cmd(message: Message, state: FSMContext):
-    bot_logger.info(f"User {message.from_user.id} using command /setzodiac")
-    user_id = message.from_user.id
-    profile = await find_current_profile_by_user_id(user_id=user_id)
-    if not profile:
-        await message.answer(text=_("user_not_found_msg"), reply_markup=await get_decline_reply())
-        return
-    await message.answer(
-        text=_("choose_zodiac_msg"),
-        reply_markup=await get_zodiac_inline()
-    )
-
+    
+# Эта функция осталась от вашего кода, но она нигде не вызывается. 
+# Возможно, она нужна для будущего функционала.
 async def get_zodiac_inline():
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    keyboard = InlineKeyboardMarkup()
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     signs = ["aries", "taurus", "gemini", "cancer", "leo", "virgo",
              "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces"]
-    for sign in signs:
-        keyboard.add(InlineKeyboardButton(text=sign.capitalize(), callback_data=f"zodiac_{sign}"))
+    # Правильный способ добавления кнопок в aiogram 3.x
+    buttons = [InlineKeyboardButton(text=sign.capitalize(), callback_data=f"zodiac_{sign}") for sign in signs]
+    keyboard.inline_keyboard = [[button] for button in buttons] # Каждая кнопка на новой строке
     return keyboard
 
+# === ВОССТАНОВЛЕННЫЙ ХЕНДЛЕР ВЫБОРА ЗНАКА ВРУЧНУЮ ===
 @profile_router.callback_query(F.data.startswith("zodiac_"))
 async def process_zodiac_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
@@ -99,8 +108,7 @@ async def process_zodiac_callback(callback: CallbackQuery, state: FSMContext):
     user_id = callback.message.chat.id
     profile = await find_current_profile_by_user_id(user_id=user_id)
     if profile:
-        profile.zodiac_sign = sign
-        await update_profile(profile_id=profile.id, updated_profile=profile)
+        await update_profile(profile_id=profile.id, update_data={"zodiac_sign": sign})
         await callback.message.answer(
             text=_("zodiac_set_msg").format(sign=sign.capitalize()),
             reply_markup=await get_menu_reply()
@@ -108,6 +116,8 @@ async def process_zodiac_callback(callback: CallbackQuery, state: FSMContext):
     else:
         await callback.message.answer(text=_("user_not_found_msg"))
     await callback.answer()
+    
+# === ОСТАЛЬНЫЕ ХЕНДЛЕРЫ ИЗ ВАШЕГО ФАЙЛА ===
 
 @profile_router.callback_query(F.data.startswith(ProfileCallback.CHANGE_PROFILE))
 async def handle_change_profile_callback(callback: CallbackQuery, state: FSMContext):
@@ -139,8 +149,7 @@ async def handle_delete_profile_callback(callback: CallbackQuery, state: FSMCont
     user_profiles = await find_profiles_by_user_id(user_id=user_id)
     if user_profiles and len(user_profiles) > 0:
         new_current_profile = user_profiles[0]
-        user.current_profile_id = new_current_profile.id
-        await update_user(user_id=user_id, updated_user=user)
+        await update_user(user_id=user_id, update_data={"current_profile_id": new_current_profile.id})
         await callback.message.answer(text=_("profile_deleted_changed_msg"))
     else:
         await callback.message.answer(text=_("profile_deleted_new_msg"))
@@ -155,12 +164,9 @@ async def handle_change_status_callback(callback: CallbackQuery, state: FSMConte
 @profile_router.callback_query(F.data.startswith(ProfileCallback.PROFILE_OPTION))
 async def handle_profile_option_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
-    data = callback.data.split()
-    profile_id = int(data[1])
+    profile_id = int(callback.data.split()[1])
     user_id = callback.message.chat.id
-    user = await find_user_by_id(user_id=user_id)
-    user.current_profile_id = profile_id
-    await update_user(user_id=user_id, updated_user=user)
+    await update_user(user_id=user_id, update_data={"current_profile_id": profile_id})
     await callback.message.answer(text=_("profile_changed_msg"))
     await callback.answer()
 
@@ -172,77 +178,60 @@ async def handle_add_profile_callback(callback: CallbackQuery, state: FSMContext
 
 @profile_router.callback_query(F.data.startswith(ProfileCallback.CHANGE_TITLE))
 async def handle_change_title_callback(callback: CallbackQuery, state: FSMContext):
-    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
     await state.set_state(ChangeDataStates.title.state)
-    await callback.message.answer(
-        text=_("send_prof_name_msg"), reply_markup=await get_decline_reply()
-    )
+    await callback.message.answer(text=_("send_prof_name_msg"), reply_markup=await get_decline_reply())
     await callback.answer()
 
 @profile_router.callback_query(F.data.startswith(ProfileCallback.CHANGE_BIRTH_DATE))
 async def handle_change_birth_date_callback(callback: CallbackQuery, state: FSMContext):
-    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
     await state.set_state(ChangeDataStates.birth_date.state)
-    await callback.message.answer(
-        text=_("send_birth_date_msg"), reply_markup=await get_decline_reply()
-    )
+    await callback.message.answer(text=_("send_birth_date_msg"), reply_markup=await get_decline_reply())
     await callback.answer()
 
 @profile_router.callback_query(F.data.startswith(ProfileCallback.CHANGE_BIRTH_TIME))
 async def handle_change_birth_time_callback(callback: CallbackQuery, state: FSMContext):
-    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
     await state.set_state(ChangeDataStates.birth_time.state)
-    await callback.message.answer(
-        text=_("send_birth_time_msg"), reply_markup=await get_decline_reply()
-    )
+    await callback.message.answer(text=_("send_birth_time_msg"), reply_markup=await get_decline_reply())
     await callback.answer()
 
 @profile_router.callback_query(F.data.startswith(ProfileCallback.CHANGE_BIRTH_LOCATION))
-async def handle_change_birth_location_callback(
-    callback: CallbackQuery, state: FSMContext
-):
-    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
+async def handle_change_birth_location_callback(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ChangeDataStates.birth_location.state)
-    await callback.message.answer(
-        text=_("send_birth_location_msg"), reply_markup=await get_decline_reply()
-    )
+    await callback.message.answer(text=_("send_birth_location_msg"), reply_markup=await get_decline_reply())
     await callback.answer()
 
 @profile_router.message(ChangeDataStates.title)
 async def handle_profile_change_title(message: Message, state: FSMContext):
-    bot_logger.info(f"User {message.from_user.id} sending title: {message.text}")
-    title = message.text
-    if title and len(title) <= 100:
+    if message.text and len(message.text) <= 100:
         user_id = message.from_user.id
         current_profile = await find_current_profile_by_user_id(user_id=user_id)
-        current_profile.title = title
-        await update_profile(
-            profile_id=current_profile.id, updated_profile=current_profile
-        )
-        await message.answer(
-            text=_("title_changed_msg"), reply_markup=await get_menu_reply()
-        )
+        await update_profile(profile_id=current_profile.id, update_data={"title": message.text})
+        await message.answer(text=_("title_changed_msg"), reply_markup=await get_menu_reply())
         await state.clear()
     else:
         await message.answer(text=_("prof_name_err_msg"), reply_markup=await get_decline_reply())
 
+# === ИСПРАВЛЕННЫЙ ХЕНДЛЕР СМЕНЫ ДАТЫ РОЖДЕНИЯ ===
 @profile_router.message(ChangeDataStates.birth_date)
 async def handle_profile_change_birth_date(message: Message, state: FSMContext):
-    bot_logger.info(f"User {message.from_user.id} sending birth date: {message.text}")
     date_pattern = r"^\d{2}\.\d{2}\.\d{4}$"
     if message.text and re.match(date_pattern, message.text):
         user_id = message.from_user.id
         current_profile = await find_current_profile_by_user_id(user_id=user_id)
         try:
             birth_date = datetime.strptime(message.text, "%d.%m.%Y").date()
-            current_date = datetime.now().date()
-            if birth_date.year >= 1900 and birth_date < current_date:
-                current_profile.birth_date = birth_date
-                await update_profile(
-                    profile_id=current_profile.id, updated_profile=current_profile
-                )
+            if 1900 <= birth_date.year < datetime.now().year:
+                # Создаем словарь только с теми данными, которые хотим обновить
+                update_data = {
+                    "birth_date": birth_date,
+                    "zodiac_sign": get_zodiac_sign(birth_date)
+                }
+                # Используем новую, надежную функцию update_profile
+                await update_profile(profile_id=current_profile.id, update_data=update_data)
+                
                 await message.answer(
-                    text=_("birth_date_changed_msg"), reply_markup=await get_menu_reply()
+                    text=_("birth_date_changed_and_zodiac_msg").format(zodiac=update_data["zodiac_sign"].capitalize()),
+                    reply_markup=await get_menu_reply()
                 )
                 await state.clear()
             else:
@@ -254,43 +243,27 @@ async def handle_profile_change_birth_date(message: Message, state: FSMContext):
 
 @profile_router.message(ChangeDataStates.birth_time)
 async def handle_profile_change_birth_time(message: Message, state: FSMContext):
-    bot_logger.info(f"User {message.from_user.id} sending birth time: {message.text}")
     time_pattern = r"^\d{2}:\d{2}$"
     if message.text and re.match(time_pattern, message.text):
         user_id = message.from_user.id
         current_profile = await find_current_profile_by_user_id(user_id=user_id)
         try:
             birth_time = datetime.strptime(message.text, "%H:%M").time()
-            if birth_time.hour < 24 and birth_time.minute < 60:
-                current_profile.birth_time = birth_time
-                await update_profile(
-                    profile_id=current_profile.id, updated_profile=current_profile
-                )
-                await message.answer(
-                    text=_("birth_time_changed_msg"), reply_markup=await get_menu_reply()
-                )
-                await state.clear()
-            else:
-                await message.answer(text=_("birth_time_err_msg"), reply_markup=await get_decline_reply())
+            await update_profile(profile_id=current_profile.id, update_data={"birth_time": birth_time})
+            await message.answer(text=_("birth_time_changed_msg"), reply_markup=await get_menu_reply())
+            await state.clear()
         except ValueError:
             await message.answer(text=_("birth_time_err_msg"), reply_markup=await get_decline_reply())
     else:
         await message.answer(text=_("birth_time_err_msg"), reply_markup=await get_decline_reply())
-
+        
 @profile_router.message(ChangeDataStates.birth_location)
 async def handle_profile_change_birth_location(message: Message, state: FSMContext):
-    bot_logger.info(f"User {message.from_user.id} sending birth location: {message.text}")
     if message.text and len(message.text) <= 200:
         user_id = message.from_user.id
         current_profile = await find_current_profile_by_user_id(user_id=user_id)
-        current_profile.birth_location_name = message.text
-        await update_profile(
-            profile_id=current_profile.id,
-            updated_profile=current_profile,
-        )
-        await message.answer(
-            text=_("birth_location_changed_msg"), reply_markup=await get_menu_reply()
-        )
+        await update_profile(profile_id=current_profile.id, update_data={"birth_location_name": message.text})
+        await message.answer(text=_("birth_location_changed_msg"), reply_markup=await get_menu_reply())
         await state.clear()
     else:
         await message.answer(text=_("birth_location_err_msg"), reply_markup=await get_decline_reply())

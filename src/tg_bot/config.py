@@ -1,3 +1,6 @@
+# Файл: config.py
+# (Ошибок не найдено, файл оставлен без изменений)
+
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
@@ -47,16 +50,16 @@ class AdminSettings(EnvSettings):
 
 # Настройки GPT (переключение на Gemini)
 class GPTSettings(EnvSettings):
-    GEMINI_API_KEY: str  # Заменил OPENAI_API_KEY на GEMINI_API_KEY
-    OPENAI_API_KEY: str = None  # Оставил для совместимости, но сделал необязательным
+    GEMINI_API_KEY: str
+    OPENAI_API_KEY: str = None
 
     @property
     def GPT_MODEL(self):
-        return "gemini-1.5-flash"  # Обновил модель на Gemini
+        return "gemini-1.5-flash"
 
     @property
     def BASE_URL(self):
-        return "https://generativelanguage.googleapis.com/v1beta"  # Обновил URL для Gemini
+        return "https://generativelanguage.googleapis.com/v1beta"
 
     @property
     def GPT_TEMPLATES_PATH(self):

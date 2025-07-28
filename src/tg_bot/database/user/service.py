@@ -1,6 +1,5 @@
 from sqlalchemy import select
-from typing import Optional, List
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional, List, Dict, Any
 
 from database.user.models import User
 from database.profile.models import Profile
@@ -34,8 +33,12 @@ async def find_all_users() -> List[User]:
         logger.info(f"All users fetched: {users}")
         return users
 
-async def update_user(user_id: int, updated_user: User) -> Optional[User]:
-    """Update a user's data dynamically without explicitly naming columns."""
+
+# === ГЛАВНОЕ ИСПРАВЛЕНИЕ: ПЕРЕПИСАННАЯ ФУНКЦИЯ UPDATE_USER ===
+async def update_user(user_id: int, update_data: Dict[str, Any]) -> Optional[User]:
+    """
+    Update a user's data using a dictionary of changes.
+    """
     async with async_session_maker() as session:
         stmt = select(User).where(User.user_id == user_id)
         result = await session.execute(stmt)
@@ -45,14 +48,17 @@ async def update_user(user_id: int, updated_user: User) -> Optional[User]:
             logger.warning(f"User with ID {user_id} not found for update.")
             return None
 
-        for key, value in updated_user.__dict__.items():
-            if key != "_sa_instance_state" and hasattr(User, key) and key != "id":
+        for key, value in update_data.items():
+            if hasattr(existing_user, key):
                 setattr(existing_user, key, value)
+            else:
+                logger.warning(f"Attempted to update non-existent attribute '{key}' on User.")
 
         await session.commit()
         await session.refresh(existing_user)
-        logger.info(f"User updated: {existing_user}")
+        logger.info(f"User updated: {existing_user.__dict__}")
         return existing_user
+
 
 async def delete_user(user_id: int) -> Optional[User]:
     """Delete a user by their ID."""
@@ -60,11 +66,9 @@ async def delete_user(user_id: int) -> Optional[User]:
         stmt = select(User).where(User.user_id == user_id)
         result = await session.execute(stmt)
         user = result.scalars().first()
-
         if user is None:
             logger.warning(f"User with ID {user_id} not found for deletion.")
             return None
-
         await session.delete(user)
         await session.commit()
         logger.info(f"User deleted: {user}")
@@ -72,33 +76,12 @@ async def delete_user(user_id: int) -> Optional[User]:
 
 async def set_current_profile(user_id: int, profile_id: int) -> Optional[User]:
     """Set the current profile ID for a user."""
-    async with async_session_maker() as session:
-        stmt = select(Profile).where(Profile.id == profile_id, Profile.user_id == user_id)
-        result = await session.execute(stmt)
-        profile = result.scalars().first()
-
-        if not profile:
-            logger.warning(f"Profile with ID {profile_id} does not belong to User {user_id}.")
-            return None
-
-        stmt = select(User).where(User.user_id == user_id)
-        result = await session.execute(stmt)
-        user = result.scalars().first()
-
-        if not user:
-            logger.warning(f"User with ID {user_id} not found.")
-            return None
-
-        user.current_profile_id = profile_id
-        await session.commit()
-        await session.refresh(user)
-        logger.info(f"User {user_id} current_profile_id set to {profile_id}.")
-        return user
+    # Используем нашу новую надежную функцию
+    return await update_user(user_id=user_id, update_data={"current_profile_id": profile_id})
 
 async def add_admin(telegram_id: int, username: str = None, locale: str = "ru") -> User:
     """Add or update an admin user in the database."""
     async with async_session_maker() as session:
-        # Проверяем, существует ли пользователь
         stmt = select(User).where(User.user_id == telegram_id)
         result = await session.execute(stmt)
         existing_user = result.scalars().first()
@@ -107,18 +90,19 @@ async def add_admin(telegram_id: int, username: str = None, locale: str = "ru") 
             logger.info(f"Admin with Telegram ID {telegram_id} already exists.")
             return existing_user
 
-        # Создаем или обновляем пользователя
-        user = existing_user or User(
-            user_id=telegram_id,
-            name=username or f"Admin_{telegram_id}",
-            locale=locale,
-            is_admin=True,
-            subscription=User.subscription.property.columns[0].default.arg,  # По умолчанию FREELY
-            is_mail_subscribed=True
-        )
-        if not existing_user:
-            session.add(user)
-        await session.commit()
-        await session.refresh(user)
-        logger.info(f"Admin added/updated - Telegram ID: {telegram_id}, Name: {user.name}")
-        return user
+        if existing_user:
+            # Если пользователь есть, но он не админ, обновляем его
+            update_data = {"is_admin": True}
+            if username:
+                update_data["name"] = username
+            return await update_user(user_id=telegram_id, update_data=update_data)
+        else:
+            # Если пользователя нет, создаем нового
+            new_admin = User(
+                user_id=telegram_id,
+                name=username or f"Admin_{telegram_id}",
+                locale=locale,
+                is_admin=True,
+                is_mail_subscribed=True
+            )
+            return await create_user(new_admin)

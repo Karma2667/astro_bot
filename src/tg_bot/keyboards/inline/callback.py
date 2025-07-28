@@ -1,3 +1,18 @@
+from enum import Enum
+
+class TaroCallback(Enum):
+    STUDY = "taro_study"
+    MOOD = "taro_mood"
+    LOVE = "taro_love"
+    COMPATIBILITY = "taro_compatibility"
+    INCOME = "taro_income"
+    SUCCESS = "taro_success"
+
+    DURATION_TODAY = "taro_duration_today" 
+    DURATION_TOMORROW = "taro_duration_tomorrow"
+    DURATION_PICK_DATE = "taro_duration_pick_date"
+
+
 class BasicCallback:
     LANGUAGE = "language"
 
@@ -29,12 +44,13 @@ class EventsCallback:
     STUDY = "event_study"
     MOOD = "event_mood"
     LOVE = "event_love"
+    COMPATIBILITY = "event_compatibility"
     INCOME = "event_income"
     SUCCESS = "event_success"
-    DURATION_45 = "event_duration_45"
-    DURATION_90 = "event_duration_90"
-    DURATION_180 = "event_duration_180"
-    DURATION_365 = "event_duration_365"
+    DURATION_TODAY = "event_duration_today" 
+    DURATION_TOMORROW = "event_duration_tomorrow"
+    DURATION_PICK_DATE = "event_duration_pick_date"
+
 
 
 class SubscriptionCallback:

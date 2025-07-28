@@ -10,6 +10,7 @@ from database.base import Base
 class PredictionType(Enum):
     HOROSCOPE = "horoscope"
     EVENT = "event"
+    COMPATIBILITY = "compatibility"
 
 
 class Prediction(Base):
@@ -48,3 +49,4 @@ class Prediction(Base):
 
     def __str__(self):
         return f"({self.id})"
+

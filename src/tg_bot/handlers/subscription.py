@@ -13,9 +13,7 @@ from keyboards.inline.callback import SubscriptionCallback
 from database.user.models import Subscription
 from database.user.service import find_user_by_id, update_user
 
-
 subscription_router = Router(name="subscription")
-
 
 @subscription_router.message(Command("sub"))
 async def handle_subscription_cmd(message: Message, state: FSMContext):
@@ -42,25 +40,23 @@ async def handle_subscription_cmd(message: Message, state: FSMContext):
             text=_("no_subscription_msg"), reply_markup=await get_subscription_inline()
         )
 
-
 @subscription_router.callback_query(F.data.startswith(SubscriptionCallback.MONTHLY))
 async def handle_monthly_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
     user_id = callback.message.chat.id
     user = await find_user_by_id(user_id=user_id)
     if user.subscription is Subscription.MONTHLY:
-        await callback.message.answer(text=_('subscirbed_montly_msg'), reply_markup=await get_menu_reply())
+        await callback.message.answer(text=_('subscribed_monthly_msg'), reply_markup=await get_menu_reply())
     else:
         await callback.message.answer_invoice(
             title=_("sub_month_msg"),
             description=_("sub_description_msg"),
             payload="month_sub",
             currency="XTR",
-            prices=[LabeledPrice(label=_("sub_month_msg"), amount=250)],
+            prices=[LabeledPrice(label=_("sub_month_msg"), amount=1)],  # 1 XTR = 100
         )
         await state.set_data({"sub_type": Subscription.MONTHLY.value})
     await callback.answer()
-
 
 @subscription_router.callback_query(F.data.startswith(SubscriptionCallback.FOREVER))
 async def handle_forever_callback(callback: CallbackQuery, state: FSMContext):
@@ -70,16 +66,14 @@ async def handle_forever_callback(callback: CallbackQuery, state: FSMContext):
         description=_("sub_description_msg"),
         payload="forever_sub",
         currency="XTR",
-        prices=[LabeledPrice(label=_("sub_forever_msg"), amount=1000)],
+        prices=[LabeledPrice(label=_("sub_forever_msg"), amount=100)],  # 1 XTR = 100
     )
     await state.set_data({"sub_type": Subscription.FOREVER.value})
     await callback.answer()
 
-
 @subscription_router.pre_checkout_query(lambda query: True)
 async def pre_checkout_query(pre_checkout_q: PreCheckoutQuery) -> None:
     await pre_checkout_q.answer(ok=True)
-
 
 @subscription_router.message(F.successful_payment)
 async def handle_successful_payment(message: Message, state: FSMContext):
