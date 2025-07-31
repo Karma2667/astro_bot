@@ -404,3 +404,9 @@ msgstr "🏆 Успехи"
 
 msgid "choose_taro_theme_msg"
 msgstr "🔮 Сейчас ты увидишь, что приготовила тебе Вселенная. Расслабься и доверься потоку…"
+
+msgid "taro_full_spread_btn"
+msgstr "🔍 Полный расклад"
+
+msgid "invalid_callback_data_msg"
+msgstr "Error: Invalid request data."

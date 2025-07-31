@@ -12,6 +12,8 @@ class TaroCallback(Enum):
     DURATION_TOMORROW = "taro_duration_tomorrow"
     DURATION_PICK_DATE = "taro_duration_pick_date"
 
+    FULL_SPREAD = "taro_full_spread"
+
 
 class BasicCallback:
     LANGUAGE = "language"

@@ -53,7 +53,7 @@ async def handle_monthly_callback(callback: CallbackQuery, state: FSMContext):
             description=_("sub_description_msg"),
             payload="month_sub",
             currency="XTR",
-            prices=[LabeledPrice(label=_("sub_month_msg"), amount=1)],  # 1 XTR = 100
+            prices=[LabeledPrice(label=_("sub_month_msg"), amount=250)],  # 1 XTR = 100
         )
         await state.set_data({"sub_type": Subscription.MONTHLY.value})
     await callback.answer()

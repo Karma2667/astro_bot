@@ -106,5 +106,9 @@ class Settings:
     gpt = GPTSettings()
     payment = PaymentSettings()
 
+def get_taro_image_path(image_filename: str) -> Path:
+    from pathlib import Path
+    return ASSET_FOLDER / "images" / "tarot" / image_filename
+
 # Глобальный экземпляр настроек
 settings = Settings()

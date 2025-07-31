@@ -59,3 +59,10 @@ async def get_taro_date_selection_inline(theme: str) -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+async def get_full_spread_button(theme: str) -> InlineKeyboardMarkup: # Или так, для единообразия
+    callback_data = f"{TaroCallback.FULL_SPREAD.value}:{theme}"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=_("taro_full_spread_btn"), callback_data=callback_data)]
+    ])
+    return keyboard

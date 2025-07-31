@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.i18n import gettext as _
 from datetime import datetime, date, timedelta
 import re
-
+from database.user.service import find_user_by_id
 from logger import bot_logger
 from filters.access import ProfileRegistered
 from keyboards.inline.callback import EventsCallback

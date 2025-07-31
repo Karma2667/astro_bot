@@ -17,7 +17,7 @@ except Exception as e:
 class TemplateType(Enum):
     EVENT = "event_template.txt"
     HOROSCOPE = "horoscope_template.txt"
-    # === НОВЫЙ ТИП ===
+    TARO = "taro"
     COMPATIBILITY = "compatibility_template.txt"
 
 async def send_gpt_request(prompt: str) -> Optional[str]:
