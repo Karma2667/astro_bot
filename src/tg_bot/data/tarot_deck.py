@@ -28,7 +28,7 @@ TAROT_DECK: Dict[str, CardInfo] = {
     "The Strength": CardInfo(name="The Strength", image_filename="08_Strenghch.jpg", suit=None),
     "The Hermit": CardInfo(name="The Hermit", image_filename="09_hermit.jpg", suit=None),
     "The Wheel of Fortune": CardInfo(name="The Wheel of Fortune", image_filename="10_fortune.jpg", suit=None),
-    "The Justice": CardInfo(name="The Justice", image_filename="11_justice.jpg", suit=None),
+    "The Justice": CardInfo(name="The Justice", image_filename="11_justise.jpg", suit=None),
     "The Hanged Man": CardInfo(name="The Hanged Man", image_filename="12_hanged_men.jpg", suit=None),
     "The Death": CardInfo(name="The Death", image_filename="13_death.jpg", suit=None),
     "The Temperance": CardInfo(name="The Temperance", image_filename="14_temperam.jpg", suit=None),
@@ -53,7 +53,7 @@ TAROT_DECK: Dict[str, CardInfo] = {
     "Page of Swords": CardInfo(name="Page of Swords", image_filename="31_swords11.jpg", suit=Suit.SWORDS),
     "Knight of Swords": CardInfo(name="Knight of Swords", image_filename="32_swords12.jpg", suit=Suit.SWORDS),
     "Queen of Swords": CardInfo(name="Queen of Swords", image_filename="33_swords13.jpg", suit=Suit.SWORDS),
-    "King of Swords": CardInfo(name="King of Swords", image_filename="34_sword14s.jpg", suit=Suit.SWORDS),
+    "King of Swords": CardInfo(name="King of Swords", image_filename="34_swordS14.jpg", suit=Suit.SWORDS),
     
     "Ace of Wands": CardInfo(name="Ace of Wands", image_filename="35_wands01.jpg", suit=Suit.WANDS),
     "Two of Wands": CardInfo(name="Two of Wands", image_filename="36_wands02.jpg", suit=Suit.WANDS),

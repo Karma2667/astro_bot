@@ -40,6 +40,7 @@ class HoroscopeCallback:
     MAIL = "horo_mail"
     SUBSCRIBE = "horo_subscribe"
     UNSUBSCRIBE = "horo_unsubscribe"
+    ZODIAC_COMPATIBILITY_START = "horo_zcompat_start"
 
 
 class EventsCallback:
@@ -58,3 +59,4 @@ class EventsCallback:
 class SubscriptionCallback:
     FOREVER = "sub_forever"
     MONTHLY = "sub_monthly"
+

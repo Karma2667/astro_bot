@@ -3,7 +3,7 @@ import asyncio
 import logging
 from aiogram import Router, F # type: ignore
 from aiogram.filters import Command, StateFilter  # type: ignore
-from aiogram.types import Message, CallbackQuery, FSInputFile # type: ignore
+from aiogram.types import Message, CallbackQuery, FSInputFile, InputMediaPhoto # type: ignore
 from aiogram.fsm.context import FSMContext # type: ignore
 from aiogram.utils.i18n import gettext as __ # type: ignore
 from gpt.template import load_template, TemplateType
@@ -162,11 +162,8 @@ async def handle_taro_compatibility_callback(callback: CallbackQuery, state: FSM
         text=__("send_first_name_msg"),
         reply_markup=await get_decline_reply()
     )
-    # Устанавливаем состояние FSM для обработки ввода имен в этом же роутере
     await state.set_state(CompatibilityStates.waiting_for_first_name)
     await callback.answer()
-
-# --- ХЕНДЛЕРЫ ДЛЯ FSM СОВМЕСТИМОСТИ (работают внутри taro_router) ---
 
 @taro_router.message(StateFilter(CompatibilityStates.waiting_for_first_name))
 async def handle_taro_first_name_input(message: Message, state: FSMContext):
@@ -188,7 +185,6 @@ async def handle_taro_first_name_input(message: Message, state: FSMContext):
 
 @taro_router.message(StateFilter(CompatibilityStates.waiting_for_second_name))
 async def handle_taro_second_name_input(message: Message, state: FSMContext):
-    """Обработчик ввода второго имени для Таро-совместимости и запуск расчета."""
     bot_logger.info(f"[Taro] User {message.from_user.id} entered second name: {message.text}")
     
     if not message.text or len(message.text.strip()) < 2:
@@ -204,7 +200,6 @@ async def handle_taro_second_name_input(message: Message, state: FSMContext):
     wait_msg = await message.answer(text=__("wait_calc_msg"))
     
     try:
-        # Вызываем функцию расчета совместимости из events.py
         compatibility_result = await make_compatibility(user_id=user_id, name1=first_name, name2=second_name)
         
         await wait_msg.delete()
@@ -381,63 +376,132 @@ async def make_taro_full_prediction(user_id: int, theme: str) -> tuple[str, list
         return (response.strip(), drawn_cards)
 
 
-
 @taro_router.callback_query(F.data.startswith(TaroCallback.FULL_SPREAD.value))
 async def handle_taro_full_spread_callback(callback: CallbackQuery, state: FSMContext):
-    logger = logging.getLogger(__name__) # Или bot_logger
+    """Обработчик нажатия кнопки 'Полный расклад'."""
+    logger = bot_logger 
     logger.info(f"[Taro Full Handler] !!! STARTED !!! User {callback.from_user.id} with data '{callback.data}'")
-
+    
+    # Инициализируем wait_msg как None для безопасного удаления в блоках except/finally
+    wait_msg = None 
+    
     try:
         logger.info(f"[Taro Full Handler] User {callback.from_user.id} pressed 'Full Spread' button. Callback data: {callback.data}")
+        
+        # --- 1. Парсим данные callback ---
         try:
             _, theme = callback.data.split(":", 1)
             logger.info(f"[Taro Full Handler] Parsed theme: '{theme}'")
         except ValueError:
             logger.error(f"[Taro Full Handler] Invalid callback data format: {callback.data}")
-            await callback.answer(text=__("invalid_callback_data_msg"), show_alert=True)
+            await callback.answer(text=__("invalid_callback_data_msg"), show_alert=True) 
             return
 
         user_id = callback.from_user.id
-
+        
+        # --- 2. Показываем сообщение ожидания ---
         logger.info(f"[Taro Full Handler] Sending 'wait_calc_msg' to user {user_id}")
         wait_msg = await callback.message.answer(text=__("wait_calc_msg"))
+        
+        # --- 3. Генерируем полный расклад ---
+        logger.info(f"[Taro Full Handler] Calling make_taro_full_prediction for user {user_id}, theme '{theme}'")
+        # ВАЖНО: make_taro_full_prediction теперь должна возвращать (str, list[str])
+        full_prediction_text, drawn_cards_list = await make_taro_full_prediction(user_id=user_id, theme=theme)
 
-        try:
-            logger.info(f"[Taro Full Handler] Calling make_taro_full_prediction for user {user_id}, theme '{theme}'")
-            full_prediction = await make_taro_full_prediction(user_id=user_id, theme=theme)
-            logger.info(f"[Taro Full Handler] make_taro_full_prediction returned. Prediction length: {len(full_prediction) if full_prediction else 0}")
-
+        logger.info(
+            f"[Taro Full Handler] make_taro_full_prediction returned. "
+            f"Prediction length: {len(full_prediction_text) if full_prediction_text else 0}, "
+            f"Cards drawn: {drawn_cards_list}"
+        )
+        
+        # --- 4. Удаляем сообщение ожидания ---
+        if wait_msg:
             logger.info(f"[Taro Full Handler] Deleting wait message for user {user_id}")
             await wait_msg.delete()
+            wait_msg = None # Сбрасываем, чтобы знать, что сообщение удалено
 
-            logger.info(f"[Taro Full Handler] Sending full prediction to user {user_id}")
-            menu_kb = await get_menu_reply()
-            logger.debug(f"[Taro Full Handler] get_menu_reply returned keyboard object: {menu_kb is not None}")
-            await callback.message.answer(text=full_prediction, reply_markup=menu_kb)
-            logger.info(f"[Taro Full Handler] Full prediction sent to user {user_id}")
+        # --- 5. Отправляем изображения карт ---
+        # Проверяем, что список карт корректен
+        if drawn_cards_list and isinstance(drawn_cards_list, list) and len(drawn_cards_list) == 3:
+            media_list = []
+            successfully_added_media = 0 # Счетчик успешно добавленных фото
+            
+            # Создаем InputMediaPhoto для каждой карты
+            for i, card_name in enumerate(drawn_cards_list):
+                try:
+                    image_path = get_card_image_path(card_name)
+                    logger.debug(f"[Taro Full Handler] Trying to add image for card '{card_name}' from path: {image_path}")
+                    
+                    if image_path.exists(): # Проверяем, существует ли файл
+                        input_media = InputMediaPhoto(media=FSInputFile(image_path))
+                        # Можно добавить короткую подпись к каждой фото в группе (опционально)
+                        # input_media.caption = f"Карта {i+1}: {card_name}"[:1024] # Ограничиваем длину
+                        media_list.append(input_media)
+                        successfully_added_media += 1
+                        logger.debug(f"[Taro Full Handler] Added image for card '{card_name}' to media group.")
+                    else:
+                       logger.warning(f"[Taro Full Handler] Image file not found for card '{card_name}' at {image_path}. Skipping in media group.")
+                except Exception as card_error:
+                    logger.error(f"[Taro Full Handler] Error processing image for card '{card_name}': {card_error}", exc_info=True)
+                    # Пропускаем карту с ошибкой
+            
+            # Отправляем медиагруппу, если хотя бы одно фото успешно добавлено
+            if successfully_added_media > 0:
+                logger.info(f"[Taro Full Handler] Sending media group with {successfully_added_media} images to user {user_id}")
+                try:
+                    await callback.message.answer_media_group(media=media_list)
+                    logger.info(f"[Taro Full Handler] Media group sent successfully to user {user_id}")
+                except Exception as media_group_error:
+                    logger.error(f"[Taro Full Handler] Error sending media group to user {user_id}: {media_group_error}", exc_info=True)
+                    # Отправляем сообщение об ошибке отправки изображений
+                    await callback.message.answer(text=__("error_sending_images_msg", "Не удалось отправить изображения карт."))
+            else:
+                 # Если ни одно изображение не удалось подготовить
+                 logger.warning(f"[Taro Full Handler] No valid images found for drawn cards {drawn_cards_list}. Sending text only.")
+                 await callback.message.answer(text=__("no_card_images_available_msg", "Изображения карт временно недоступны."))
+        else:
+            logger.warning(
+                f"[Taro Full Handler] Expected list of 3 cards, got {type(drawn_cards_list)} "
+                f"with length {len(drawn_cards_list) if isinstance(drawn_cards_list, (list, tuple)) else 'N/A'}. "
+                f"Skipping image send. Drawn cards data: {drawn_cards_list}"
+            )
+            # Можно отправить сообщение, что изображения недоступны
+            # await callback.message.answer(text=__("no_card_images_available_msg", "Изображения карт временно недоступны."))
 
-        except Exception as inner_e:
-            logger.error(f"[Taro Full Handler] Error during prediction/messaging for user {user_id}: {inner_e}", exc_info=True)
+        # --- 6. Отправляем текст предсказания ---
+        logger.info(f"[Taro Full Handler] Sending full prediction text to user {user_id}")
+        menu_kb = await get_menu_reply()
+        logger.debug(f"[Taro Full Handler] get_menu_reply returned keyboard object: {menu_kb is not None}")
+        
+        await callback.message.answer(text=full_prediction_text, reply_markup=menu_kb)
+        logger.info(f"[Taro Full Handler] Full prediction text sent to user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"[Taro Full Handler] Error in handle_taro_full_spread_callback for user {callback.from_user.id}: {e}", exc_info=True)
+        
+        # Удаляем wait_msg, если он еще существует
+        if wait_msg:
             try:
                 await wait_msg.delete()
-            except Exception as del_e:
-                logger.warning(f"[Taro Full Handler] Could not delete wait_msg for user {user_id}: {del_e}")
-            error_msg = _("error_generating_prediction_msg")
-            menu_kb = await get_menu_reply()
-            await callback.message.answer(text=error_msg, reply_markup=menu_kb)
-
-    except Exception as outer_e:
-        logger.critical(f"[Taro Full Handler] UNHANDLED EXCEPTION for user {callback.from_user.id}: {outer_e}", exc_info=True)
+                logger.info(f"[Taro Full Handler] Wait message deleted after error for user {callback.from_user.id}")
+            except Exception as delete_error:
+                logger.warning(f"[Taro Full Handler] Could not delete wait_msg for user {callback.from_user.id}: {delete_error}")
+        
+        # Отправляем сообщение об ошибке пользователю
         try:
-            error_msg = _("error_generating_prediction_msg")
+            error_msg = __("error_generating_prediction_msg") 
             menu_kb = await get_menu_reply()
             await callback.message.answer(text=error_msg, reply_markup=menu_kb)
-        except:
-            pass
-
+            logger.info(f"[Taro Full Handler] Error message sent to user {callback.from_user.id}")
+        except Exception as send_error:
+             logger.error(f"[Taro Full Handler] Failed to send error message to user {callback.from_user.id}: {send_error}", exc_info=True)
+             
     finally:
-        logger.info(f"[Taro Full Handler] Answering callback for user {callback.from_user.id}")
-        await callback.answer()
+        # ВСЕГДА отвечаем на callback, чтобы убрать "часики"
+        try:
+            await callback.answer()
+            logger.info(f"[Taro Full Handler] Callback answered for user {callback.from_user.id}")
+        except Exception as answer_error:
+            logger.warning(f"[Taro Full Handler] Could not answer callback for user {callback.from_user.id}: {answer_error}")
+            
         logger.info(f"[Taro Full Handler] !!! FINISHED !!! for user {callback.from_user.id}")
-
-

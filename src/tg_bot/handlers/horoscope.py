@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 
 from logger import bot_logger
-from states.horoscope import DateState
+from states.horoscope import DateState, CompatibilitySignsState
 from filters.access import ProfileRegistered
 from keyboards.reply.common import get_decline_reply
 from keyboards.inline.callback import HoroscopeCallback
@@ -18,6 +18,7 @@ from keyboards.inline.horoscope import (
     get_subscribe_inline,
     get_unsubscribe_inline,
 )
+from data.zodiac_signs import VALID_ZODIAC_SIGNS_LOWER
 from gpt.template import load_template, inject_profile_into_template, TemplateType
 from gpt.gpt import send_gpt_request
 from database.user.models import Subscription
@@ -210,3 +211,153 @@ async def handle_unsubscribe_callback(callback: CallbackQuery, state: FSMContext
         reply_markup=await get_subscribe_inline()
     )
     await callback.answer()
+
+# handlers/horoscope.py
+# ... (существующий код) ...
+
+# --- НОВАЯ ФУНКЦИЯ ---
+async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str) -> str:
+    """
+    Генерирует совместимость двух знаков Зодиака.
+    sign1_key, sign2_key - нормализованные (нижний регистр, без пробелов) названия знаков
+                          (ключи из VALID_ZODIAC_SIGNS_LOWER).
+    locale - локаль пользователя (например, "ru").
+    """
+    bot_logger.info(f"[Zodiac Compatibility] make_zodiac_compatibility called: sign1='{sign1_key}', sign2='{sign2_key}', locale='{locale}'")
+
+    # 1. Проверка валидности входных данных
+    if sign1_key not in VALID_ZODIAC_SIGNS_LOWER or sign2_key not in VALID_ZODIAC_SIGNS_LOWER:
+        bot_logger.error(f"[Zodiac Compatibility] Invalid sign keys provided: '{sign1_key}', '{sign2_key}'")
+        return _("error_generating_prediction_msg")
+
+    # 2. Получаем оригинальные (системные) названия знаков для формирования ключа кэша
+    original_sign1 = VALID_ZODIAC_SIGNS_LOWER[sign1_key]
+    original_sign2 = VALID_ZODIAC_SIGNS_LOWER[sign2_key]
+
+    # 3. Формируем ключ для кэширования
+    # Сортируем имена, чтобы порядок ввода не влиял на ключ (Овен+Лев = Лев+Овен)
+    sorted_signs = sorted([original_sign1, original_sign2])
+    cache_key = f"zcompat_{sorted_signs[0]}_{sorted_signs[1]}_{locale}"
+
+    # 4. Проверяем кэш (предполагается, что PredictionType.ZODIAC_COMPATIBILITY определен)
+    try:
+        db_result = await find_prediction_by_recognition_and_type(
+            recognition_str=cache_key, prediction_type=PredictionType.ZODIAC_COMPATIBILITY
+        )
+        if db_result:
+            bot_logger.info(f"[Zodiac Compatibility] Found in DB for key: {cache_key}")
+            return db_result.prediction
+    except Exception as e:
+        bot_logger.warning(f"[Zodiac Compatibility] Error checking cache for key {cache_key}: {e}", exc_info=True)
+
+    bot_logger.info(f"[Zodiac Compatibility] Not in DB. Calling GPT for key: {cache_key}")
+
+    try:
+        # 5. Загружаем шаблон для совместимости
+        # Убедитесь, что TemplateType.ZODIAC_COMPATIBILITY определен и шаблон существует
+        template = await load_template(
+            locale=locale,
+            template_type=TemplateType.ZODIAC_COMPATIBILITY
+        )
+    except Exception as e:
+        bot_logger.error(f"[Zodiac Compatibility] Error loading template: {e}", exc_info=True)
+        return _("error_generating_prediction_msg")
+
+    # 6. Переводим названия знаков для использования в промпте
+    # Предполагается, что в .po файлах ключи перевода - это системные имена знаков в нижнем регистре и с подчеркиванием
+    # Например, msgid "aries" -> msgstr "Овен"
+    translated_sign1 = _(original_sign1.lower().replace(" ", "_"))
+    translated_sign2 = _(original_sign2.lower().replace(" ", "_"))
+
+    # 7. Подставляем знаки в шаблон
+    prompt = template.format(sign1=translated_sign1, sign2=translated_sign2)
+    bot_logger.debug(f"[Zodiac Compatibility] Prepared prompt (len={len(prompt)}). First 150 chars: '{prompt[:150]}...'")
+
+    # 8. Вызываем GPT
+    try:
+        response = await send_gpt_request(prompt=prompt)
+        bot_logger.info(f"[Zodiac Compatibility] GPT API call completed. Response is None/Empty: {not response or not response.strip()}")
+    except Exception as e:
+        bot_logger.error(f"[Zodiac Compatibility] Exception during GPT API call: {e}", exc_info=True)
+        return _("error_generating_prediction_msg")
+
+    if not response or not response.strip():
+        bot_logger.error(f"[Zodiac Compatibility] Failed to get a valid response from GPT API.")
+        return _("error_generating_prediction_msg")
+
+    response_text = response.strip()
+
+    # 9. Сохраняем результат в БД
+    # Для этого типа предсказаний нужен profile_id.
+    # Временное решение: не кэшируем или используем заглушку.
+    # Идеальное решение: создать отдельную таблицу для кэширования таких "общих" предсказаний
+    # или определить "системный" профиль.
+    # Пока просто логируем, что не кэшируем.
+    bot_logger.info(f"[Zodiac Compatibility] Generated text (not cached in DB due to missing profile_id logic): {response_text[:100]}...")
+
+    return response_text
+# --- НОВАЯ ФУНКЦИЯ ---
+
+# ... (остальной код файла) ...
+
+@horoscope_router.callback_query(F.data == HoroscopeCallback.ZODIAC_COMPATIBILITY_START)
+async def handle_zodiac_compatibility_start_callback(callback: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки 'Совместимость знаков' - начало ввода."""
+    bot_logger.info(f"User {callback.from_user.id} started zodiac compatibility process.")
+    await callback.message.answer(
+        text=_("zodiac_compatibility_ask_first_sign_msg"), # "Введите первый знак Зодиака:"
+        reply_markup=await get_decline_reply()
+    )
+    await state.set_state(CompatibilitySignsState.waiting_for_first_sign)
+    await callback.answer()
+
+@horoscope_router.message(CompatibilitySignsState.waiting_for_first_sign)
+async def handle_first_zodiac_sign(message: Message, state: FSMContext):
+    bot_logger.info(f"User {message.from_user.id} entered first sign: {message.text}")
+    
+    raw_sign = message.text.strip().lower() if message.text else ""
+
+    await state.update_data(first_sign_key=raw_sign) # Сохраняем системное имя
+    await message.answer(
+        text=_("zodiac_compatibility_ask_second_sign_msg"), # "Введите второй знак Зодиака:"
+        reply_markup=await get_decline_reply()
+    )
+    await state.set_state(CompatibilitySignsState.waiting_for_second_sign)
+
+@horoscope_router.message(CompatibilitySignsState.waiting_for_second_sign)
+async def handle_second_zodiac_sign(message: Message, state: FSMContext):
+    bot_logger.info(f"User {message.from_user.id} entered second sign: {message.text}")
+    
+    user_data = await state.get_data()
+    first_sign_key = user_data.get('first_sign_key')
+    
+    if not first_sign_key:
+        bot_logger.error(f"User {message.from_user.id} entered second sign without first sign in state.")
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+        await state.clear()
+        return
+
+    raw_sign2 = message.text.strip().lower() if message.text else ""
+    
+    second_sign_key = raw_sign2 # Сохраняем системное имя второго знака
+
+    user = await find_user_by_id(user_id=message.from_user.id)
+    user_locale = user.locale if user else "ru" # По умолчанию 'ru'
+
+    wait_msg = await message.answer(text=_("wait_calc_msg"))
+    try:
+        compatibility_text = await make_zodiac_compatibility(
+            sign1_key=first_sign_key, 
+            sign2_key=second_sign_key, 
+            locale=user_locale
+        )
+        
+        await wait_msg.delete()
+        await message.answer(text=compatibility_text, reply_markup=await get_menu_reply())
+        
+    except Exception as e:
+        bot_logger.error(f"Error in handle_second_zodiac_sign (compatibility generation) for user {message.from_user.id}: {e}", exc_info=True)
+        await wait_msg.delete()
+        await message.answer(text=_("error_generating_prediction_msg"), reply_markup=await get_menu_reply())
+    finally:
+        await state.clear()
