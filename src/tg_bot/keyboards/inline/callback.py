@@ -54,6 +54,9 @@ class EventsCallback:
     DURATION_TOMORROW = "event_duration_tomorrow"
     DURATION_PICK_DATE = "event_duration_pick_date"
 
+class NumerologyCallback:
+    START_ANGEL = "num_angel_start"
+    START_BIRTHDATE_ANGEL = "num_birthdate_angel_start"
 
 
 class SubscriptionCallback:

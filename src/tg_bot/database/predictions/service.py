@@ -125,14 +125,15 @@ async def find_prediction_by_recognition_and_type(recognition_str: str, predicti
     """
     async with async_session_maker() as session:
         try:
+            # ИСПРАВЛЕНИЕ: Используем prediction_type.value для получения строкового значения
             stmt = select(Prediction).where(
                 Prediction.recognition_str == recognition_str,
-                Prediction.prediction_type == prediction_type
+                Prediction.prediction_type == prediction_type.value # <-- ИСПРАВЛЕНО
             )
             result = await session.execute(stmt)
             prediction = result.scalars().first()
-            logger.info(f"Prediction fetched by recognition '{recognition_str}' and type {prediction_type}: {'Found' if prediction else 'Not found'}")
+            logger.info(f"Prediction fetched by recognition '{recognition_str}' and type {prediction_type.value}: {'Found' if prediction else 'Not found'}")
             return prediction
         except SQLAlchemyError as e:
-            logger.error(f"Database error while fetching prediction by recognition '{recognition_str}': {str(e)}")
+            logger.error(f"Database error while fetching prediction by recognition '{recognition_str}' and type '{prediction_type.value}': {str(e)}")
             raise

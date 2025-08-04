@@ -10,27 +10,12 @@ logger = logging.getLogger(__name__)
 class TemplateType(Enum):
     EVENT = "event_template.txt"
     HOROSCOPE = "horoscope_template.txt"
-    TARO = "taro" # Значение - это папка
+    TARO = "taro" 
     COMPATIBILITY = "compatibility_template.txt"
-    ZODIAC_COMPATIBILITY = "zodiac_compatibility.txt" # <-- Исправлено: добавлено .txt
+    ZODIAC_COMPATIBILITY = "zodiac_compatibility.txt" 
+    ANGEL_NUMBERS = "angel_numbers.txt"
 
 async def load_template(locale: str, template_type: TemplateType, taro_theme: str = None):
-    """
-    Асинхронно загружает шаблон из файла.
-
-    Args:
-        locale (str): Код локали (например, 'ru', 'en').
-        template_type (TemplateType): Тип шаблона.
-        taro_theme (str, optional): Тема для шаблонов Таро (например, 'love', 'full_study').
-
-    Returns:
-        str: Содержимое файла шаблона.
-
-    Raises:
-        ValueError: Если переданы некорректные аргументы.
-        FileNotFoundError: Если файл шаблона не найден.
-        Exception: Если произошла другая ошибка при загрузке.
-    """
     try:
         template_path = None
         
@@ -63,6 +48,15 @@ async def load_template(locale: str, template_type: TemplateType, taro_theme: st
                     / locale
                     / TemplateType.ZODIAC_COMPATIBILITY.value # "zodiac_compatibility.txt"
                 )
+            case TemplateType.ANGEL_NUMBERS:
+                # Аналогично ZODIAC_COMPATIBILITY, используем путь из config.py
+                template_path = (
+                    TG_BOT_FOLDER # Убедитесь, что TG_BOT_FOLDER импортирован
+                    / "gpt"
+                    / "templates"
+                    / locale
+                    / TemplateType.ANGEL_NUMBERS.value # "angel_numbers.txt"
+                )
             case TemplateType.TARO:
                 if not taro_theme:
                     raise ValueError("taro_theme must be provided for TARO template type")
@@ -73,6 +67,7 @@ async def load_template(locale: str, template_type: TemplateType, taro_theme: st
                     / TemplateType.TARO.value  # "taro" (папка)
                     / f"{taro_theme}.txt"      # <taro_theme>.txt
                 )
+            
             case _:
                 raise ValueError(f"Unknown template type: {template_type}")
 

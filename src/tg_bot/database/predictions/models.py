@@ -12,6 +12,7 @@ class PredictionType(Enum):
     EVENT = "event"
     COMPATIBILITY = "compatibility"
     ZODIAC_COMPATIBILITY = "zodiac_compatibility"
+    ANGEL_NUMBERS = "angel_numbers"
 
 
 class Prediction(Base):

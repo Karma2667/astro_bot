@@ -6,12 +6,13 @@ from .subscription import subscription_router
 from .horoscope import horoscope_router
 from .events import event_router
 from .taro import taro_router
+from .numerology import numerology_router
 
 from middleware.cancelation import DeclineMiddleware
 
 all_routers = (
     basic_router, profile_router, register_router,
-    subscription_router,taro_router, horoscope_router, event_router,
+    subscription_router,taro_router, numerology_router, horoscope_router, event_router,
     general_router,
 )
 

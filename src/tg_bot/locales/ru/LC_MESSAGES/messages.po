@@ -410,3 +410,24 @@ msgstr "🔍 Полный расклад"
 
 msgid "invalid_callback_data_msg"
 msgstr "Error: Invalid request data."
+
+msgid "zodiac_compatibility_btn"
+msgstr "Совместимость"
+
+msgid "angel_numbers_btn"
+msgstr "Ангельские числа"
+
+msgid "ask_angel_numbers_msg"
+msgstr "Введите последовательность ангельских чисел (например, 111 432 7):"
+
+msgid "invalid_numbers_msg"
+msgstr "Неверный формат чисел. Пожалуйста, введите только цифры, разделенные пробелами."
+
+msgid "choose_angel_numbers_type_msg"
+msgstr "Выберите способ получения ангельских чисел:"
+
+msgid "angel_numbers_input_btn"
+msgstr "Ввести числа"
+
+msgid "angel_numbers_from_birthdate_btn"
+msgstr "Рассчитать из даты рождения"
