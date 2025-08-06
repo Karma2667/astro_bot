@@ -1,8 +1,8 @@
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.utils.i18n import gettext as _
+from aiogram import Router, F # type: ignore
+from aiogram.filters import Command # type: ignore
+from aiogram.types import Message, CallbackQuery # type: ignore
+from aiogram.fsm.context import FSMContext # type: ignore
+from aiogram.utils.i18n import gettext as _ # type: ignore
 
 import re
 from datetime import datetime
@@ -46,69 +46,97 @@ async def format_horoscope(sub: Subscription, horoscope: str) -> str:
     return await shorten_horoscope(sub=sub, horoscope=horoscope) + extra
 
 async def make_horoscope(user_id: int, date: str) -> str:
+    bot_logger.info(f"[Horoscope] make_horoscope called: user_id={user_id}, date={date}")
+
     user = await find_user_by_id(user_id=user_id)
     user_profile = await find_current_profile_by_user_id(user_id=user_id)
-    
+
+    if not user or not user_profile:
+        bot_logger.error(f"[Horoscope] User or profile not found for user_id {user_id}.")
+        return _("error_msg") # Или более специфичное сообщение
+
     if not user_profile.zodiac_sign:
         return _("no_zodiac_msg")
 
-    # --- Логика определения recognition_str остается без изменений ---
+    if user.subscription == Subscription.FREELY:
+        template_type = TemplateType.FREE_HOROSCOPE
+        cache_prefix = "free"
+    else:
+        template_type = TemplateType.HOROSCOPE
+        cache_prefix = "full"
+
     match date:
         case "today":
-            recognition_str = datetime.today().strftime("%d.%m.%Y")
+            date_str = datetime.today().strftime("%d.%m.%Y")
         case "month":
-            recognition_str = datetime.today().strftime("%m.%Y")
+            date_str = datetime.today().strftime("%m.%Y")
         case _:
-            recognition_str = date
-    recognition_str = f'{recognition_str} {user.locale} {user_profile.id}'
-    
+            date_str = date
+
+    recognition_str = f'{cache_prefix}_{date_str}_{user.locale}_{user_profile.id}'
     db_horoscope = await find_prediction_by_recognition_and_type(
         recognition_str=recognition_str, prediction_type=PredictionType.HOROSCOPE
     )
 
     if db_horoscope:
+        bot_logger.info(f"[Horoscope] Found in DB for key: {recognition_str}")
         return await format_horoscope(
             sub=user.subscription, horoscope=db_horoscope.prediction
         )
-    
-    template = await load_template(
-        locale=user.locale, template_type=TemplateType.HOROSCOPE
-    )
+   
+    bot_logger.info(f"[Horoscope] Not in DB. Calling GPT for key: {recognition_str}")
 
-    # 1. Получаем системное имя знака из БД (например, "Aries")
-    zodiac_sign_key = user_profile.zodiac_sign.lower() # .lower() для надежности
-    
-    # 2. Переводим его, используя контекст i18n. 
-    #    Функция _() сама поймет, что у user.locale = 'ru' и возьмет нужный перевод.
+    try:
+        template = await load_template(
+            locale=user.locale, template_type=template_type
+        )
+    except Exception as e:
+        bot_logger.error(f"[Horoscope] Error loading template '{template_type}': {e}", exc_info=True)
+        return _("error_msg")
+   
+    zodiac_sign_key = user_profile.zodiac_sign.lower()
     translated_zodiac_sign = _(zodiac_sign_key)
 
-    # 3. Используем уже переведенное значение в промпте
-    prompt = await inject_profile_into_template(
-        extra=f"зодиак {translated_zodiac_sign}, {date}", template=template, profile=user_profile
-    )
-    # ---------------------------
-
-    response = await send_gpt_request(prompt=prompt)
-    
-    if not response:
+    try:
+        if template_type == TemplateType.FREE_HOROSCOPE:
+            prompt = template.format(zodiac_sign=translated_zodiac_sign, date=date_str)
+        else:
+            prompt = await inject_profile_into_template(
+                extra=f"зодиак {translated_zodiac_sign}, {date}", template=template, profile=user_profile
+            )
+        bot_logger.debug(f"[Horoscope] Prepared prompt (len={len(prompt)}). First 150 chars: '{prompt[:150]}...'")
+    except Exception as e:
+        bot_logger.error(f"[Horoscope] Error preparing prompt for user {user_id}: {e}", exc_info=True)
+        return _("error_msg")
+    try:
+        response = await send_gpt_request(prompt=prompt)
+        bot_logger.info(f"[Horoscope] GPT API call completed. Response is None/Empty: {not response or not response.strip()}")
+    except Exception as e:
+        bot_logger.error(f"[Horoscope] Exception during GPT API call for user {user_id}: {e}", exc_info=True)
         return _("error_msg")
 
-    await create_prediction(
-        Prediction(
-            profile_id=user_profile.id,
-            prediction=response,
-            prediction_type=PredictionType.HOROSCOPE,
-            recognition_str=recognition_str,
-        )
-    )
+    if not response or not response.strip():
+        bot_logger.error(f"[Horoscope] Failed to get a valid response from GPT API for user {user_id}.")
+        return _("error_msg")
 
-    return await format_horoscope(sub=user.subscription, horoscope=response)
+    response_text = response.strip()
+    try:
+        await create_prediction(Prediction(..., prediction_type=PredictionType.HOROSCOPE.value))
+        bot_logger.info(f"[Horoscope] Prediction saved to DB for key: {recognition_str}")
+    except Exception as e:
+        bot_logger.error(f"[Horoscope] Error saving to DB for user {user_id}: {e}", exc_info=True)
+    return await format_horoscope(sub=user.subscription, horoscope=response_text)
 
 @horoscope_router.message(Command("horoscope"), ProfileRegistered())
 async def handle_horoscope_cmd(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} using command /horoscope")
+    
+    user = await find_user_by_id(user_id=message.from_user.id)
+    if not user:
+        await message.answer(text=_("error_msg")) # Или более специфичное сообщение
+        return
     user_profile = await find_current_profile_by_user_id(user_id=message.from_user.id)
-    if not user_profile.zodiac_sign:
+    if not user_profile or not user_profile.zodiac_sign:
         await message.answer(
             text=_("no_zodiac_msg"),
             reply_markup=await get_decline_reply()
@@ -116,14 +144,14 @@ async def handle_horoscope_cmd(message: Message, state: FSMContext):
         return
     await message.answer(
         text=_("create_horoscope_option_msg"),
-        reply_markup=await get_horo_inline()
+        reply_markup=await get_horo_inline(user_subscription=user.subscription) # <-- Здесь
     )
 
 @horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.TODAY))
 async def handle_today_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
     wait_msg = await callback.message.answer(text=_("wait_calc_msg"))
-    horoscope = await make_horoscope(user_id=callback.message.chat.id, date="today")
+    horoscope = await make_horoscope(user_id=callback.from_user.id, date="today") 
     await wait_msg.delete()
     await callback.message.answer(text=horoscope, reply_markup=await get_menu_reply())
     await callback.answer()
@@ -131,8 +159,15 @@ async def handle_today_callback(callback: CallbackQuery, state: FSMContext):
 @horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.MONTH))
 async def handle_month_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
+    
+    user = await find_user_by_id(user_id=callback.from_user.id)
+    if not user or user.subscription == Subscription.FREELY:
+        # Для бесплатной подписки доступ запрещен
+        await callback.answer(text=_("feature_not_available_for_free_msg"), show_alert=True) # Нужно добавить перевод
+        return
+    
     wait_msg = await callback.message.answer(text=_("wait_calc_msg"))
-    horoscope = await make_horoscope(user_id=callback.message.chat.id, date="month")
+    horoscope = await make_horoscope(user_id=callback.from_user.id, date="month")
     await wait_msg.delete()
     await callback.message.answer(text=horoscope, reply_markup=await get_menu_reply())
     await callback.answer()
@@ -140,10 +175,16 @@ async def handle_month_callback(callback: CallbackQuery, state: FSMContext):
 @horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.DATE))
 async def handle_date_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
+    
+    user = await find_user_by_id(user_id=callback.from_user.id)
+    if not user or user.subscription == Subscription.FREELY:
+        await callback.answer(text=_("feature_not_available_for_free_msg"), show_alert=True) # Нужно добавить перевод
+        return
+    
     await callback.message.answer(
         text=_("ask_date_msg"), reply_markup=await get_decline_reply()
     )
-    await state.set_state(DateState.date.state)
+    await state.set_state(DateState.date)
     await callback.answer()
 
 @horoscope_router.message(DateState.date)
@@ -152,10 +193,8 @@ async def handle_date(message: Message, state: FSMContext):
     date_pattern = r"^\d{2}\.\d{2}\.\d{4}$"
     if message.text and re.match(date_pattern, message.text):
         try:
-            # Преобразование текста в дату остается для валидации
             datetime.strptime(message.text, "%d.%m.%Y").date() 
             
-            # Убрана проверка на будущую дату
             wait_msg = await message.answer(text=_("wait_calc_msg"))
             horoscope = await make_horoscope(user_id=message.from_user.id, date=message.text)
             await wait_msg.delete()
@@ -163,86 +202,27 @@ async def handle_date(message: Message, state: FSMContext):
             await state.clear()
             
         except ValueError:
-            # Эта ошибка сработает, если дата некорректна, например, 32.12.2024
             await message.answer(text=_("date_error_msg"), reply_markup=await get_decline_reply())
     else:
-        # Эта ошибка сработает, если формат не ДД.ММ.ГГГГ
         await message.answer(text=_("date_error_msg"), reply_markup=await get_decline_reply())
 
-@horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.MAIL))
-async def handle_mail_callback(callback: CallbackQuery, state: FSMContext):
-    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
-    user_id = callback.message.chat.id
-    user = await find_user_by_id(user_id=user_id)
-    if user.is_mail_subscribed:
-        await callback.message.answer(
-            text=_("mail_subscribed_msg").format(str(await callback.bot.get_my_name()).split("'")[1]),
-            reply_markup=await get_unsubscribe_inline()
-        )
-    else:
-        await callback.message.answer(
-            text=_("mail_unsubscribe_msg"),
-            reply_markup=await get_subscribe_inline()
-        )
-    await callback.answer()
-
-@horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.SUBSCRIBE))
-async def handle_subscribe_callback(callback: CallbackQuery, state: FSMContext):
-    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
-    user_id = callback.message.chat.id
-    user = await find_user_by_id(user_id=user_id)
-    user.is_mail_subscribed = True
-    await update_user(user_id=user_id, updated_user=user)
-    await callback.message.edit_text(
-        text=_("mail_subscribed_msg").format(str(await callback.bot.get_my_name()).split("'")[1]),
-        reply_markup=await get_unsubscribe_inline()
-    )
-    await callback.answer()
-
-@horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.UNSUBSCRIBE))
-async def handle_unsubscribe_callback(callback: CallbackQuery, state: FSMContext):
-    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
-    user_id = callback.message.chat.id
-    user = await find_user_by_id(user_id=user_id)
-    user.is_mail_subscribed = False
-    await update_user(user_id=user_id, updated_user=user)
-    await callback.message.edit_text(
-        text=_("mail_unsubscribe_msg"),
-        reply_markup=await get_subscribe_inline()
-    )
-    await callback.answer()
-
-# handlers/horoscope.py
-# ... (существующий код) ...
-
-# --- НОВАЯ ФУНКЦИЯ ---
 async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str) -> str:
-    """
-    Генерирует совместимость двух знаков Зодиака.
-    sign1_key, sign2_key - нормализованные (нижний регистр, без пробелов) названия знаков
-                          (ключи из VALID_ZODIAC_SIGNS_LOWER).
-    locale - локаль пользователя (например, "ru").
-    """
     bot_logger.info(f"[Zodiac Compatibility] make_zodiac_compatibility called: sign1='{sign1_key}', sign2='{sign2_key}', locale='{locale}'")
 
-    # 1. Проверка валидности входных данных
     if sign1_key not in VALID_ZODIAC_SIGNS_LOWER or sign2_key not in VALID_ZODIAC_SIGNS_LOWER:
         bot_logger.error(f"[Zodiac Compatibility] Invalid sign keys provided: '{sign1_key}', '{sign2_key}'")
         return _("error_generating_prediction_msg")
 
-    # 2. Получаем оригинальные (системные) названия знаков для формирования ключа кэша
     original_sign1 = VALID_ZODIAC_SIGNS_LOWER[sign1_key]
     original_sign2 = VALID_ZODIAC_SIGNS_LOWER[sign2_key]
 
-    # 3. Формируем ключ для кэширования
-    # Сортируем имена, чтобы порядок ввода не влиял на ключ (Овен+Лев = Лев+Овен)
     sorted_signs = sorted([original_sign1, original_sign2])
     cache_key = f"zcompat_{sorted_signs[0]}_{sorted_signs[1]}_{locale}"
-
-    # 4. Проверяем кэш (предполагается, что PredictionType.ZODIAC_COMPATIBILITY определен)
+    
+    prediction_type_for_db = PredictionType.ZODIAC_COMPATIBILITY # <-- Используем правильный тип
     try:
         db_result = await find_prediction_by_recognition_and_type(
-            recognition_str=cache_key, prediction_type=PredictionType.ZODIAC_COMPATIBILITY
+            recognition_str=cache_key, prediction_type=prediction_type_for_db # <-- Передаем Enum
         )
         if db_result:
             bot_logger.info(f"[Zodiac Compatibility] Found in DB for key: {cache_key}")
@@ -253,27 +233,20 @@ async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str)
     bot_logger.info(f"[Zodiac Compatibility] Not in DB. Calling GPT for key: {cache_key}")
 
     try:
-        # 5. Загружаем шаблон для совместимости
-        # Убедитесь, что TemplateType.ZODIAC_COMPATIBILITY определен и шаблон существует
         template = await load_template(
             locale=locale,
-            template_type=TemplateType.ZODIAC_COMPATIBILITY
+            template_type=TemplateType.ZODIAC_COMPATIBILITY # Убедитесь, что такой тип шаблона определен
         )
     except Exception as e:
         bot_logger.error(f"[Zodiac Compatibility] Error loading template: {e}", exc_info=True)
         return _("error_generating_prediction_msg")
 
-    # 6. Переводим названия знаков для использования в промпте
-    # Предполагается, что в .po файлах ключи перевода - это системные имена знаков в нижнем регистре и с подчеркиванием
-    # Например, msgid "aries" -> msgstr "Овен"
     translated_sign1 = _(original_sign1.lower().replace(" ", "_"))
     translated_sign2 = _(original_sign2.lower().replace(" ", "_"))
 
-    # 7. Подставляем знаки в шаблон
     prompt = template.format(sign1=translated_sign1, sign2=translated_sign2)
     bot_logger.debug(f"[Zodiac Compatibility] Prepared prompt (len={len(prompt)}). First 150 chars: '{prompt[:150]}...'")
 
-    # 8. Вызываем GPT
     try:
         response = await send_gpt_request(prompt=prompt)
         bot_logger.info(f"[Zodiac Compatibility] GPT API call completed. Response is None/Empty: {not response or not response.strip()}")
@@ -287,22 +260,13 @@ async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str)
 
     response_text = response.strip()
 
-    # 9. Сохраняем результат в БД
-    # Для этого типа предсказаний нужен profile_id.
-    # Временное решение: не кэшируем или используем заглушку.
-    # Идеальное решение: создать отдельную таблицу для кэширования таких "общих" предсказаний
-    # или определить "системный" профиль.
-    # Пока просто логируем, что не кэшируем.
+
     bot_logger.info(f"[Zodiac Compatibility] Generated text (not cached in DB due to missing profile_id logic): {response_text[:100]}...")
 
     return response_text
-# --- НОВАЯ ФУНКЦИЯ ---
-
-# ... (остальной код файла) ...
 
 @horoscope_router.callback_query(F.data == HoroscopeCallback.ZODIAC_COMPATIBILITY_START)
 async def handle_zodiac_compatibility_start_callback(callback: CallbackQuery, state: FSMContext):
-    """Обработчик кнопки 'Совместимость знаков' - начало ввода."""
     bot_logger.info(f"User {callback.from_user.id} started zodiac compatibility process.")
     await callback.message.answer(
         text=_("zodiac_compatibility_ask_first_sign_msg"), # "Введите первый знак Зодиака:"
@@ -361,3 +325,47 @@ async def handle_second_zodiac_sign(message: Message, state: FSMContext):
         await message.answer(text=_("error_generating_prediction_msg"), reply_markup=await get_menu_reply())
     finally:
         await state.clear()
+
+@horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.SUBSCRIBE))
+async def handle_subscribe_callback(callback: CallbackQuery, state: FSMContext):
+    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
+    user_id = callback.message.chat.id
+    user = await find_user_by_id(user_id=user_id)
+    user.is_mail_subscribed = True
+    await update_user(user_id=user_id, updated_user=user)
+    await callback.message.edit_text(
+        text=_("mail_subscribed_msg").format(str(await callback.bot.get_my_name()).split("'")[1]),
+        reply_markup=await get_unsubscribe_inline()
+    )
+    await callback.answer()
+
+@horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.UNSUBSCRIBE))
+async def handle_unsubscribe_callback(callback: CallbackQuery, state: FSMContext):
+    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
+    user_id = callback.message.chat.id
+    user = await find_user_by_id(user_id=user_id)
+    user.is_mail_subscribed = False
+    await update_user(user_id=user_id, updated_user=user)
+    await callback.message.edit_text(
+        text=_("mail_unsubscribe_msg"),
+        reply_markup=await get_subscribe_inline()
+    )
+    await callback.answer()
+
+@horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.MAIL))
+async def handle_mail_callback(callback: CallbackQuery, state: FSMContext):
+    bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
+    user_id = callback.message.chat.id
+    user = await find_user_by_id(user_id=user_id)
+    if user.is_mail_subscribed:
+        await callback.message.answer(
+            text=_("mail_subscribed_msg").format(str(await callback.bot.get_my_name()).split("'")[1]),
+            reply_markup=await get_unsubscribe_inline()
+        )
+    else:
+        await callback.message.answer(
+            text=_("mail_unsubscribe_msg"),
+            reply_markup=await get_subscribe_inline()
+        )
+    await callback.answer()
+

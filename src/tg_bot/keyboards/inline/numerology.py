@@ -3,7 +3,6 @@ from aiogram.utils.keyboard import InlineKeyboardMarkup, InlineKeyboardButton # 
 from keyboards.inline.callback import NumerologyCallback
 
 async def get_angel_numbers_start_inline():
-    """Клавиатура начала толкования Ангельских чисел."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [

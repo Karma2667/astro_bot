@@ -1,10 +1,8 @@
-
-
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
-from aiogram.utils.i18n import gettext as _
+from aiogram import Router, F # type: ignore
+from aiogram.filters import Command # type: ignore
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton # type: ignore
+from aiogram.fsm.context import FSMContext # type: ignore
+from aiogram.utils.i18n import gettext as _ # type: ignore
 import re
 from datetime import datetime, date
 
@@ -31,6 +29,9 @@ from database.profile.service import (
     update_profile,
     create_profile,
 )
+from datetime import datetime # Для форматирования даты
+from database.user.models import Subscription # Для проверки типа подписки
+from database.user.service import find_user_by_id # Для получения объекта User
 
 
 profile_router = Router(name="profile")
@@ -53,54 +54,78 @@ def get_zodiac_sign(birth_date: date) -> str:
     if (month == 2 and day >= 19) or (month == 3 and day <= 20): return "pisces"
     return "unknown"
 
-async def format_profile(profile: Profile) -> str:
+
+async def format_profile(user: "User", profile: Profile) -> str:
     if profile is None:
         return _("no_profile_msg")
     
-    # Получаем локализованное название знака зодиака
     if profile.zodiac_sign:
-        # Создаем ключ для перевода на основе знака зодиака из профиля
         zodiac_key = f"profile_zodiac_{profile.zodiac_sign.lower()}"
-        # Пытаемся получить перевод. 
         zodiac_info = _(zodiac_key)
-        # Если перевод не найден (функция _ вернула тот же ключ), используем исходное значение с заглавной буквы
         if zodiac_info == zodiac_key: 
              bot_logger.warning(f"Translation for zodiac sign '{zodiac_key}' not found.")
              zodiac_info = profile.zodiac_sign.capitalize()
     else:
         zodiac_info = _("no_zodiac_msg")
     
-    return (
-        f'{_("profile_title_msg")} {profile.title}\n'
-        f'{_("profile_birth_msg")} {profile.birth_date.strftime("%d.%m.%Y")} {profile.birth_time.strftime("%H:%M")}\n'
-        f'{_("profile_birth_location_msg")} {profile.birth_location_name or _("unknown_location")}\n'
-        f'{_("profile_zodiac_msg")} {zodiac_info}'
-    )
+    profile_lines = [
+        f'<b>{_("profile_title_msg")}</b>', # "Профиль"
+        f'{_("profile_name_msg")} {profile.title}', # Используем profile.title
+        f'{_("profile_birth_msg")} {profile.birth_date.strftime("%d.%m.%Y")} {profile.birth_time.strftime("%H:%M")}',
+        f'{_("profile_birth_location_msg")} {profile.birth_location_name or _("unknown_location")}',
+        f'{_("profile_zodiac_msg")} {zodiac_info}',
+        "", # Пустая строка как разделитель
+    ]
+    profile_info_text = "\n".join(profile_lines)
+    subscription_lines = [f'<b>{_("subscription_info_title")}</b>'] # "Информация о подписке"
+    
+    subscription_type_key = f"subscription_type_{user.subscription.value}"
+    subscription_type_text = _(subscription_type_key)
+    subscription_lines.append(f"{_('subscription_type_label')}: {subscription_type_text}") # "Тип подписки: ..."
+
+    if user.subscription not in [Subscription.FOREVER, Subscription.FREELY]:
+        if user.subscription_expiration_date:
+            expiration_text = user.subscription_expiration_date.strftime("%d.%m.%Y")
+            subscription_lines.append(f"{_('subscription_expires_label')}: {expiration_text}") # "Действует до: ..."
+        else:
+            subscription_lines.append(f"{_('subscription_expires_label')}: {('subscription_unknown_expiration_text')}") # Нужно добавить перевод
+    elif user.subscription == Subscription.FOREVER:
+         subscription_lines.append(f"{_('subscription_expires_label')}: {('subscription_never_expires_text')}") # "Бессрочная"    # Для Subscription.FREELY дата истечения не показывается.
+    
+    subscription_info_text = "\n".join(subscription_lines)
+    # Объединяем обе части
+    final_text = f"{profile_info_text}\n{subscription_info_text}"
+    return final_text
+
 
 @profile_router.message(Command("profile"), ProfileRegistered())
 async def handle_profile_cmd(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} using command /profile")
     user_id = message.from_user.id
+    
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(_("error_msg")) # Или более специфичное сообщение об ошибке
+        return
+    
     profile = await find_current_profile_by_user_id(user_id=user_id)
     if profile is None:
         await message.answer(_("no_active_profile_msg"))
         await handle_register_cmd(message, state)
         return
-    profile_text = await format_profile(profile=profile)
+    
+    profile_text = await format_profile(user=user, profile=profile)
+    
     await message.answer(text=profile_text, reply_markup=await get_profile_inline())
     
-# Эта функция осталась от вашего кода, но она нигде не вызывается. 
-# Возможно, она нужна для будущего функционала.
 async def get_zodiac_inline():
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     signs = ["aries", "taurus", "gemini", "cancer", "leo", "virgo",
              "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces"]
-    # Правильный способ добавления кнопок в aiogram 3.x
     buttons = [InlineKeyboardButton(text=sign.capitalize(), callback_data=f"zodiac_{sign}") for sign in signs]
     keyboard.inline_keyboard = [[button] for button in buttons] # Каждая кнопка на новой строке
     return keyboard
 
-# === ВОССТАНОВЛЕННЫЙ ХЕНДЛЕР ВЫБОРА ЗНАКА ВРУЧНУЮ ===
 @profile_router.callback_query(F.data.startswith("zodiac_"))
 async def process_zodiac_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
@@ -117,7 +142,6 @@ async def process_zodiac_callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(text=_("user_not_found_msg"))
     await callback.answer()
     
-# === ОСТАЛЬНЫЕ ХЕНДЛЕРЫ ИЗ ВАШЕГО ФАЙЛА ===
 
 @profile_router.callback_query(F.data.startswith(ProfileCallback.CHANGE_PROFILE))
 async def handle_change_profile_callback(callback: CallbackQuery, state: FSMContext):
@@ -211,7 +235,6 @@ async def handle_profile_change_title(message: Message, state: FSMContext):
     else:
         await message.answer(text=_("prof_name_err_msg"), reply_markup=await get_decline_reply())
 
-# === ИСПРАВЛЕННЫЙ ХЕНДЛЕР СМЕНЫ ДАТЫ РОЖДЕНИЯ ===
 @profile_router.message(ChangeDataStates.birth_date)
 async def handle_profile_change_birth_date(message: Message, state: FSMContext):
     date_pattern = r"^\d{2}\.\d{2}\.\d{4}$"
@@ -221,12 +244,10 @@ async def handle_profile_change_birth_date(message: Message, state: FSMContext):
         try:
             birth_date = datetime.strptime(message.text, "%d.%m.%Y").date()
             if 1900 <= birth_date.year < datetime.now().year:
-                # Создаем словарь только с теми данными, которые хотим обновить
                 update_data = {
                     "birth_date": birth_date,
                     "zodiac_sign": get_zodiac_sign(birth_date)
                 }
-                # Используем новую, надежную функцию update_profile
                 await update_profile(profile_id=current_profile.id, update_data=update_data)
                 
                 await message.answer(

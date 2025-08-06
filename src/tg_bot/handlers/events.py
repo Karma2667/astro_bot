@@ -28,14 +28,12 @@ class CompatibilityStates(StatesGroup):
     waiting_for_first_name = State()
     waiting_for_second_name = State()
 
-# --- FSM СОСТОЯНИЯ ---
 class EventStates(StatesGroup):
-    waiting_for_custom_date = State() # Состояние ожидания ввода пользовательской даты
+    waiting_for_custom_date = State() 
 
-# --- ИНИЦИАЛИЗАЦИЯ РОУТЕРА ---
 event_router = Router(name="event-router")
 
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
 async def shorten_event(sub: Subscription, event: str) -> str:
     if not event:
         return ""
@@ -51,18 +49,11 @@ async def format_event(sub: Subscription, event: str) -> str:
         extra = f'\n\n{_("freely_unavailable_msg")}'
     return short_event + extra
 
-# --- ОСНОВНАЯ ЛОГИКА РАСЧЕТА (ОБНОВЛЕНА ДЛЯ РАБОТЫ С ДАТАМИ) ---
+
 
 async def make_event(user_id: int, theme: str, target_date: date) -> str:
-    """
-    Рассчитывает событие для конкретной даты.
-    :param user_id: ID пользователя
-    :param theme: Тема события (study, mood, love, income, success)
-    :param target_date: Целевая дата (объект date)
-    :return: Строка с результатом расчета
-    """
     bot_logger.info(f"make_event called: user_id={user_id}, theme={theme}, target_date={target_date}")
-    
+
     # 1. Получаем пользователя
     user = await find_user_by_id(user_id=user_id)
     if not user:
@@ -70,11 +61,9 @@ async def make_event(user_id: int, theme: str, target_date: date) -> str:
         return _("user_not_found_msg")
     bot_logger.info(f"User found: {user.name} (ID: {user.user_id})")
 
-    # 2. Получаем профиль пользователя
     user_profile = await find_current_profile_by_user_id(user_id=user_id)
     if not user_profile:
         bot_logger.error(f"Profile not found for user_id {user_id}.")
-        # Попробуем создать профиль, как в оригинальном коде
         bot_logger.warning(f"No profile found for user_id {user_id}, creating new profile")
         new_profile = Profile(
             user_id=user_id,
@@ -96,11 +85,9 @@ async def make_event(user_id: int, theme: str, target_date: date) -> str:
     else:
          bot_logger.info(f"Profile found: {user_profile.title} (ID: {user_profile.id})")
 
-    # 3. Формируем ключ для кэширования
     cache_key = f"{target_date.strftime('%d.%m.%Y')}_{theme}_{user.locale}_{user_profile.id}"
     bot_logger.debug(f"Generated cache key: {cache_key}")
 
-    # 4. Проверяем, есть ли результат в БД
     db_event = await find_prediction_by_recognition_and_type(
         recognition_str=cache_key, prediction_type=PredictionType.EVENT
     )
@@ -114,7 +101,6 @@ async def make_event(user_id: int, theme: str, target_date: date) -> str:
             
         bot_logger.info(f"No valid prediction in DB. Preparing to call GPT API for key: {cache_key}")
         
-        # 5. Готовим prompt для GPT
         try:
             template = await load_template(
                 locale=user.locale, template_type=TemplateType.EVENT
@@ -132,7 +118,6 @@ async def make_event(user_id: int, theme: str, target_date: date) -> str:
             bot_logger.error(f"Error preparing GPT prompt for user {user_id}: {e}", exc_info=True)
             return _("error_generating_prediction_msg")
 
-        # 6. Делаем запрос к GPT API
         bot_logger.debug(f"GPT Prompt prepared (len={len(prompt) if prompt else 0}): {prompt[:100] if prompt else 'None'}...")
         try:
             response = await send_gpt_request(prompt=prompt)
@@ -141,12 +126,10 @@ async def make_event(user_id: int, theme: str, target_date: date) -> str:
             bot_logger.error(f"Error calling GPT API for user {user_id}: {e}", exc_info=True)
             return _("error_generating_prediction_msg")
 
-        # 7. Проверяем ответ
         if response is None:
             bot_logger.error(f"Failed to get response from GPT API for user {user_id}.")
             return _("error_generating_prediction_msg")
 
-        # 8. Сохраняем результат в БД
         try:
             await create_prediction(
                 Prediction(
@@ -159,9 +142,8 @@ async def make_event(user_id: int, theme: str, target_date: date) -> str:
             bot_logger.info(f"Prediction saved to DB for key: {cache_key}")
         except Exception as e:
             bot_logger.error(f"Error saving prediction to DB for user {user_id}: {e}", exc_info=True)
-            # Не возвращаем ошибку пользователю из-за этого, просто логируем
+            
 
-        # 9. Форматируем и возвращаем результат
         return await format_event(sub=user.subscription, event=response)
 
 async def make_compatibility(user_id: int, name1: str, name2: str) -> str:
@@ -178,7 +160,6 @@ async def make_compatibility(user_id: int, name1: str, name2: str) -> str:
         bot_logger.error(f"User with id {user_id} not found for compatibility calculation.")
         return _("user_not_found_msg")
 
-    # === ИЗМЕНЕННЫЙ КЛЮЧ ДЛЯ КЭШИРОВАНИЯ ===
     normalized_name1 = name1.strip().lower()
     normalized_name2 = name2.strip().lower()
     sorted_names = sorted([normalized_name1, normalized_name2])
@@ -198,7 +179,6 @@ async def make_compatibility(user_id: int, name1: str, name2: str) -> str:
             
         bot_logger.info(f"No valid compatibility prediction in DB. Preparing to call GPT API for key: {cache_key}")
         
-        # === ФОРМИРУЕМ PROMPT ===
         try:
             bot_logger.debug("Attempting to load compatibility template...")
             template = await load_template(
@@ -215,7 +195,6 @@ async def make_compatibility(user_id: int, name1: str, name2: str) -> str:
             bot_logger.error(f"Error preparing compatibility prompt for user {user_id}: {e}", exc_info=True)
             return _("error_generating_prediction_msg")
 
-        # === ВЫЗЫВАЕМ GPT API ===
         bot_logger.info("About to call send_gpt_request...")
         try:
             response = await send_gpt_request(prompt=prompt)
@@ -228,7 +207,6 @@ async def make_compatibility(user_id: int, name1: str, name2: str) -> str:
             bot_logger.error(f"Failed to get a valid response from GPT API for user {user_id} (compatibility).")
             return _("error_generating_prediction_msg")
 
-        # === СОХРАНЯЕМ РЕЗУЛЬТАТ В БД ===
         try:
             bot_logger.debug("Attempting to save compatibility result to DB...")
             await create_prediction(
@@ -245,7 +223,6 @@ async def make_compatibility(user_id: int, name1: str, name2: str) -> str:
 
         return response
 
-# --- ХЕНДЛЕРЫ КОМАНД ---
 @event_router.message(Command("events"), ProfileRegistered())
 async def handle_event_cmd(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} using command /events")
@@ -253,15 +230,12 @@ async def handle_event_cmd(message: Message, state: FSMContext):
         text=_("wanna_date_msg"), reply_markup=await get_events_inline()
     )
 
-# --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ВЫБОРА ТЕМЫ ---
 async def handle_event_theme(callback: CallbackQuery, theme: str):
-    # Для всех пользователей показываем новую клавиатуру выбора даты
     await callback.message.answer(
-        text=_("choose_date_msg"), # Убедитесь, что этот перевод есть в .po файлах
+        text=_("choose_date_msg"), 
         reply_markup=await get_date_selection_inline(theme=theme),
     )
 
-# --- ХЕНДЛЕРЫ ВЫБОРА ТЕМЫ ---
 @event_router.callback_query(F.data.startswith(EventsCallback.STUDY))
 async def handle_study_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} selected 'Study'")
@@ -294,22 +268,18 @@ async def handle_success_callback(callback: CallbackQuery, state: FSMContext):
 
 @event_router.callback_query(F.data.startswith(EventsCallback.COMPATIBILITY))
 async def handle_compatibility_callback(callback: CallbackQuery, state: FSMContext):
-    """Обработчик нажатия кнопки 'Совместимость'."""
     bot_logger.info(f"User {callback.from_user.id} selected 'Compatibility'")
     
-    # Запрашиваем первое имя
     await callback.message.answer(
-        text=_("send_first_name_msg"), # "Введите первое имя:"
-        reply_markup=await get_decline_reply() # Импортируй get_decline_reply, если ещё не импортирован
+        text=_("send_first_name_msg"),
+        reply_markup=await get_decline_reply() 
     )
     
-    # Устанавливаем состояние ожидания первого имени
     await state.set_state(CompatibilityStates.waiting_for_first_name)
     
     await callback.answer()
 
 
-# Обработчик "Сегодня"
 @event_router.callback_query(F.data.startswith(EventsCallback.DURATION_TODAY))
 async def handle_duration_today_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} selected 'Today'")
@@ -331,7 +301,6 @@ async def handle_duration_today_callback(callback: CallbackQuery, state: FSMCont
     await callback.message.answer(text=event_result, reply_markup=await get_menu_reply())
     await callback.answer()
 
-# Обработчик "Завтра"
 @event_router.callback_query(F.data.startswith(EventsCallback.DURATION_TOMORROW))
 async def handle_duration_tomorrow_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} selected 'Tomorrow'")
@@ -346,14 +315,12 @@ async def handle_duration_tomorrow_callback(callback: CallbackQuery, state: FSMC
     user_id = callback.message.chat.id
     wait_msg = await callback.message.answer(text=_("wait_calc_msg"))
     
-    # Вызываем обновленную функцию make_event с объектом date
     event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
     
     await wait_msg.delete()
     await callback.message.answer(text=event_result, reply_markup=await get_menu_reply())
     await callback.answer()
 
-# Обработчик "Выбрать дату"
 @event_router.callback_query(F.data.startswith(EventsCallback.DURATION_PICK_DATE))
 async def handle_duration_pick_date_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} wants to pick a custom date")
@@ -363,19 +330,17 @@ async def handle_duration_pick_date_callback(callback: CallbackQuery, state: FSM
         return
         
     theme = data_parts[1]
-    # Сохраняем тему в состоянии FSM для последующего использования
     await state.set_state(EventStates.waiting_for_custom_date)
     await state.update_data(theme=theme)
     
     await callback.message.answer(
-        text=_("send_date_msg"), # Убедитесь, что этот перевод есть в .po файлах, например: "Введите дату в формате <b>ДД.ММ.ГГГГ</b> (например, <i>25.12.2025</i>)"
-        reply_markup=None # Или ваша клавиатура отмены
+        text=_("send_date_msg"),
+        reply_markup=None 
     )
     await callback.answer()
 
 @event_router.message(CompatibilityStates.waiting_for_first_name)
 async def handle_first_name_input(message: Message, state: FSMContext):
-    """Обработчик ввода первого имени."""
     bot_logger.info(f"handle_first_name_input called with message: '{message.text}'")
     try:
         bot_logger.info(f"User {message.from_user.id} entered first name: {message.text}")
@@ -385,11 +350,9 @@ async def handle_first_name_input(message: Message, state: FSMContext):
             await message.answer(text=_("invalid_name_msg")) # Добавь этот перевод
             return
 
-        # Сохраняем первое имя
         await state.update_data(first_name=message.text.strip())
         bot_logger.info("First name saved to state")
         
-        # Запрашиваем второе имя
         msg_text = _("send_second_name_msg")
         bot_logger.info(f"About to send 'send_second_name_msg' message. Translated text: '{msg_text}'")
         reply_markup = await get_decline_reply()
@@ -398,12 +361,10 @@ async def handle_first_name_input(message: Message, state: FSMContext):
         await message.answer(text=msg_text, reply_markup=reply_markup)
         bot_logger.info("'send_second_name_msg' message sent")
 
-        # Меняем состояние на ожидание второго имени
         await state.set_state(CompatibilityStates.waiting_for_second_name)
         bot_logger.info("State changed to waiting_for_second_name")
     except Exception as e:
         bot_logger.error(f"Error in handle_first_name_input for user {message.from_user.id}: {e}", exc_info=True)
-        # Попробуем отправить сообщение об ошибке пользователю, если возможно
         try:
             await message.answer("Произошла ошибка при обработке первого имени. Попробуйте снова.")
         except:
@@ -411,64 +372,49 @@ async def handle_first_name_input(message: Message, state: FSMContext):
         
 @event_router.message(StateFilter(CompatibilityStates.waiting_for_second_name))
 async def handle_second_name_input(message: Message, state: FSMContext):
-    """Обработчик ввода второго имени и запуск расчета."""
     bot_logger.info(f"User {message.from_user.id} entered second name: {message.text}")
     
     if not message.text or len(message.text.strip()) < 2:
         await message.answer(text=_("invalid_name_msg")) # Добавь этот перевод
         return
 
-    # Получаем сохраненные данные
     user_data = await state.get_data()
     first_name = user_data.get('first_name')
     second_name = message.text.strip()
     
     user_id = message.from_user.id
 
-      # Показываем сообщение ожидания
     wait_msg = await message.answer(text=_("wait_calc_msg"))
     
-    # Вызываем функцию расчета совместимости
     compatibility_result = await make_compatibility(user_id=user_id, name1=first_name, name2=second_name)
     
-    # Удаляем сообщение ожидания
     await wait_msg.delete()
     
-    # Отправляем результат пользователю
     await message.answer(text=compatibility_result, reply_markup=await get_menu_reply())
     
-    # Очищаем состояние FSM
     await state.clear()
 
 
-# Обработчик ввода пользовательской даты
 @event_router.message(StateFilter(EventStates.waiting_for_custom_date))
 async def handle_user_custom_date_input(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} entered custom date: {message.text}")
     
-    # Получаем сохраненные данные из состояния
     user_data = await state.get_data()
     theme = user_data.get('theme')
     
-    # Проверка наличия темы
     if not theme:
         await message.answer("Ошибка: тема не найдена. Попробуйте снова через /events.")
         await state.clear()
         return
 
-    # Проверяем формат даты
     date_pattern = r"^\d{2}\.\d{2}\.\d{4}$"
     if not message.text or not re.match(date_pattern, message.text):
         await message.answer(text=_("date_error_msg")) # Используем существующий перевод ошибки
-        # Не очищаем состояние, чтобы пользователь мог попробовать снова
         return
 
     try:
-        # Преобразуем строку в объект date
         target_date = datetime.strptime(message.text, "%d.%m.%Y").date()
         
-        # Дополнительная проверка на разумность даты (например, не в далеком прошлом или будущем)
-        # Можно добавить проверку, что дата не раньше 1900 года и не позже, скажем, 2100
         if target_date < date(1900, 1, 1) or target_date > date(2100, 12, 31):
              await message.answer("Пожалуйста, введите корректную дату между 01.01.1900 и 31.12.2100.")
              return # Не очищаем состояние
@@ -477,11 +423,9 @@ async def handle_user_custom_date_input(message: Message, state: FSMContext):
         await message.answer(text=_("date_error_msg"))
         return
 
-    # Все проверки пройдены, запускаем расчет
     user_id = message.from_user.id
     wait_msg = await message.answer(text=_("wait_calc_msg"))
     
-    # Вызываем обновленную функцию make_event с объектом date
     event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
     
     await wait_msg.delete()
@@ -490,6 +434,5 @@ async def handle_user_custom_date_input(message: Message, state: FSMContext):
 
 @event_router.message(lambda msg: msg.text == "🔮 Таро")
 async def handle_taro_menu_button(message: Message, state: FSMContext):
-    """Обработчик нажатия кнопки 'Таро' в главном меню."""
     bot_logger.info(f"User {message.from_user.id} pressed 'Taro' button from main menu")
     await handle_taro_cmd(message, state)

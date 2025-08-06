@@ -51,7 +51,7 @@ async def get_duration_freely_inline(theme: str) -> InlineKeyboardMarkup:
     )
 
 async def get_date_selection_inline(theme: str) -> InlineKeyboardMarkup:
-    bot_logger.info(f"get_date_selection_inline: Creating keyboard for theme '{theme}'") # Добавь это в клавиатуру, если есть bot_logger
+    bot_logger.info(f"get_date_selection_inline: Creating keyboard for theme '{theme}'") 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [

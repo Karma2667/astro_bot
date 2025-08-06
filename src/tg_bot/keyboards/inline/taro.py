@@ -36,7 +36,7 @@ async def get_taro_inline() -> InlineKeyboardMarkup:
 
 
 async def get_taro_date_selection_inline(theme: str) -> InlineKeyboardMarkup:
-    bot_logger.info(f"get_date_selection_inline: Creating keyboard for theme '{theme}'") # Добавь это в клавиатуру, если есть bot_logger
+    bot_logger.info(f"get_date_selection_inline: Creating keyboard for theme '{theme}'") 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -60,7 +60,7 @@ async def get_taro_date_selection_inline(theme: str) -> InlineKeyboardMarkup:
         ]
     )
 
-async def get_full_spread_button(theme: str) -> InlineKeyboardMarkup: # Или так, для единообразия
+async def get_full_spread_button(theme: str) -> InlineKeyboardMarkup: 
     callback_data = f"{TaroCallback.FULL_SPREAD.value}:{theme}"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=_("taro_full_spread_btn"), callback_data=callback_data)]

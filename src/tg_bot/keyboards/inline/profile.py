@@ -78,11 +78,5 @@ async def get_change_profile_data_inline() -> InlineKeyboardMarkup:
                     callback_data=ProfileCallback.CHANGE_BIRTH_LOCATION,
                 ),
             ],
-            [
-                # InlineKeyboardButton(
-                #     text=_("profile_change_location_btn"),
-                #     callback_data=ProfileCallback.CHANGE_LOCATION,
-                # )
-            ],
         ]
     )

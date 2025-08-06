@@ -19,10 +19,9 @@ general_router = Router(name="general")
 async def handle_any_msg(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} sending message: {message.text}")
 
-    # handle reply keyboard answers
+    
     text = message.text
     if text:
-        # Проверки с вызовом ProfileRegistered и вызовы других команд остаются без изменений
         if text == _("horoscope_btn") and await ProfileRegistered()(
             message=message, state=state
         ):
@@ -42,5 +41,4 @@ async def handle_any_msg(message: Message, state: FSMContext):
             await handle_help_cmd(message=message, state=state)
             return
 
-    # Если ни одна из кнопок не распознана, показываем меню
     await handle_menu_cmd(message=message, state=state)

@@ -7,20 +7,7 @@ from database.predictions.models import Prediction, PredictionType
 from database.db import async_session_maker
 
 async def create_prediction(prediction: Prediction) -> Prediction:
-    """Create a new prediction record.
-
-    Args:
-        prediction (Prediction): Prediction object with required fields (profile_id, prediction, etc.).
-
-    Returns:
-        Prediction: Created prediction object.
-
-    Raises:
-        ValueError: If prediction text is None or empty.
-        SQLAlchemyError: If database operation fails.
-    """
     async with async_session_maker() as session:
-        # Проверка на None или пустую строку
         if not prediction.prediction or prediction.prediction.strip() == "":
             raise ValueError("Prediction text cannot be None or empty")
         
@@ -40,17 +27,6 @@ async def create_prediction(prediction: Prediction) -> Prediction:
             raise
 
 async def delete_prediction(prediction_id: int) -> Optional[Prediction]:
-    """Delete a prediction by its ID.
-
-    Args:
-        prediction_id (int): ID of the prediction to delete.
-
-    Returns:
-        Optional[Prediction]: Deleted prediction object or None if not found.
-
-    Raises:
-        SQLAlchemyError: If database operation fails.
-    """
     async with async_session_maker() as session:
         try:
             prediction = await find_prediction_by_id(prediction_id)
@@ -68,14 +44,6 @@ async def delete_prediction(prediction_id: int) -> Optional[Prediction]:
             raise
 
 async def find_all_predictions() -> list[Prediction]:
-    """Find all predictions.
-
-    Returns:
-        list[Prediction]: List of all prediction objects.
-
-    Raises:
-        SQLAlchemyError: If database operation fails.
-    """
     async with async_session_maker() as session:
         try:
             stmt = select(Prediction)
@@ -88,17 +56,6 @@ async def find_all_predictions() -> list[Prediction]:
             raise
 
 async def find_prediction_by_id(prediction_id: int) -> Optional[Prediction]:
-    """Find a prediction by its ID.
-
-    Args:
-        prediction_id (int): ID of the prediction to find.
-
-    Returns:
-        Optional[Prediction]: Found prediction object or None if not found.
-
-    Raises:
-        SQLAlchemyError: If database operation fails.
-    """
     async with async_session_maker() as session:
         try:
             stmt = select(Prediction).where(Prediction.id == prediction_id)
@@ -111,24 +68,11 @@ async def find_prediction_by_id(prediction_id: int) -> Optional[Prediction]:
             raise
 
 async def find_prediction_by_recognition_and_type(recognition_str: str, prediction_type: PredictionType) -> Optional[Prediction]:
-    """Find a prediction by its recognition string and prediction type.
-
-    Args:
-        recognition_str (str): Recognition string to match.
-        prediction_type (PredictionType): Type of prediction to match.
-
-    Returns:
-        Optional[Prediction]: Found prediction object or None if not found.
-
-    Raises:
-        SQLAlchemyError: If database operation fails.
-    """
     async with async_session_maker() as session:
         try:
-            # ИСПРАВЛЕНИЕ: Используем prediction_type.value для получения строкового значения
             stmt = select(Prediction).where(
                 Prediction.recognition_str == recognition_str,
-                Prediction.prediction_type == prediction_type.value # <-- ИСПРАВЛЕНО
+                Prediction.prediction_type == prediction_type.value
             )
             result = await session.execute(stmt)
             prediction = result.scalars().first()

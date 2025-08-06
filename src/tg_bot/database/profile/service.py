@@ -7,7 +7,6 @@ from logger import db_query_logger as logger
 from database.db import async_session_maker
 
 async def create_profile(profile: Profile) -> Profile:
-    """Create a new profile record."""
     async with async_session_maker() as session:
         session.add(profile)
         await session.commit()
@@ -25,7 +24,6 @@ async def find_profile_by_id(profile_id: int) -> Optional[Profile]:
         return profile
 
 async def find_profiles_by_user_id(user_id: int) -> List[Profile]:
-    """Find all profiles associated with a user ID."""
     async with async_session_maker() as session:
         stmt = select(Profile).where(Profile.user_id == user_id)
         result = await session.execute(stmt)
@@ -34,7 +32,6 @@ async def find_profiles_by_user_id(user_id: int) -> List[Profile]:
         return profiles
 
 async def find_current_profile_by_user_id(user_id: int) -> Optional[Profile]:
-    """Find the current profile associated with a user ID."""
     async with async_session_maker() as session:
         stmt = (
             select(Profile)
@@ -46,15 +43,8 @@ async def find_current_profile_by_user_id(user_id: int) -> Optional[Profile]:
         logger.info(f"Current profile fetched for user ID {user_id}: {profile}")
         return profile
 
-
-# === ГЛАВНОЕ ИСПРАВЛЕНИЕ: ПЕРЕПИСАННАЯ И НАДЕЖНАЯ ФУНКЦИЯ UPDATE_PROFILE ===
 async def update_profile(profile_id: int, update_data: Dict[str, Any]) -> Optional[Profile]:
-    """
-    Update a profile's data using a dictionary of changes.
-    This is much safer than passing a full object.
-    """
     async with async_session_maker() as session:
-        # 1. Получаем существующий профиль из базы
         stmt = select(Profile).where(Profile.id == profile_id)
         result = await session.execute(stmt)
         existing_profile = result.scalars().first()
@@ -63,14 +53,12 @@ async def update_profile(profile_id: int, update_data: Dict[str, Any]) -> Option
             logger.warning(f"Profile with ID {profile_id} not found for update.")
             return None
 
-        # 2. Применяем изменения из словаря
         for key, value in update_data.items():
             if hasattr(existing_profile, key):
                 setattr(existing_profile, key, value)
             else:
                 logger.warning(f"Attempted to update non-existent attribute '{key}' on Profile.")
         
-        # 3. Сохраняем и обновляем сессию
         await session.commit()
         await session.refresh(existing_profile)
         logger.info(f"Profile updated: {existing_profile.__dict__}") # Улучшенное логирование
@@ -78,7 +66,6 @@ async def update_profile(profile_id: int, update_data: Dict[str, Any]) -> Option
 
 
 async def delete_profile(profile_id: int) -> Optional[Profile]:
-    """Delete a profile by its ID."""
     async with async_session_maker() as session:
         stmt = select(Profile).where(Profile.id == profile_id)
         result = await session.execute(stmt)

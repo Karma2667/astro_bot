@@ -1,5 +1,5 @@
-from sqlalchemy import String, BigInteger, Enum as SAEnum, DateTime
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, BigInteger, Enum as SAEnum, DateTime # type: ignore
+from sqlalchemy.orm import Mapped, mapped_column # type: ignore
 
 from enum import Enum
 from datetime import datetime, timedelta, timezone
@@ -13,6 +13,7 @@ class PredictionType(Enum):
     COMPATIBILITY = "compatibility"
     ZODIAC_COMPATIBILITY = "zodiac_compatibility"
     ANGEL_NUMBERS = "angel_numbers"
+    NUMEROLOGY_MATRIX = "numerology_matrix"
 
 
 class Prediction(Base):

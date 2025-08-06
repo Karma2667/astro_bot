@@ -431,3 +431,46 @@ msgstr "Ввести числа"
 
 msgid "angel_numbers_from_birthdate_btn"
 msgstr "Рассчитать из даты рождения"
+
+msgid "numerology_matrix_btn"
+msgstr "Матрица Судьбы"
+
+msgid "error_msg"
+msgstr "Произошла ошибка. Пожалуйста, попробуйте позже."
+
+msgid "subscription_info_title"
+msgstr "Информация о подписке"
+
+msgid "subscription_type_label"
+msgstr "Тип подписки"
+
+msgid "subscription_expires_label"
+msgstr "Действует до"
+
+msgid "subscription_never_expires_text"
+msgstr "Бессрочная"
+
+# Переводы для типов подписок (убедись, что они соответствуют новым значениям enum)
+msgid "subscription_type_freely"
+msgstr "Бесплатная"
+
+msgid "subscription_type_base_1m"
+msgstr "Базовая (1 месяц)"
+
+msgid "subscription_type_base_3m"
+msgstr "Базовая (3 месяца)"
+
+msgid "subscription_type_base_6m"
+msgstr "Базовая (6 месяцев)"
+
+msgid "subscription_type_base_12m"
+msgstr "Базовая (12 месяцев)"
+
+msgid "subscription_type_monthly"
+msgstr "Базовая (1 месяц)" # Или просто "Базовая", или точный срок
+
+msgid "profile_name_msg"
+msgstr "Имя"
+
+msgid "feature_not_available_for_free_msg"
+msgstr "Эта функция недоступна с бесплатной подпиской. Приобретите подписку для доступа."

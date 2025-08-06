@@ -1,11 +1,11 @@
 import asyncio
 import pytz
 import uvicorn
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy.ext.asyncio import AsyncSession
+from apscheduler.schedulers.asyncio import AsyncIOScheduler # type: ignore
+from apscheduler.triggers.cron import CronTrigger # type: ignore
+from sqlalchemy.ext.asyncio import AsyncSession # type: ignore
 from database.base import Base
-from database.db import engine, async_session_maker  # Используем async_session_maker
+from database.db import engine, async_session_maker  
 
 from bot_ import bot, dispatcher
 from server.main import app
@@ -19,13 +19,11 @@ from logger import bot_logger
 from database.user.service import add_admin  # Исправленный импорт
 
 async def init_db():
-    """Initialize the database by creating all tables."""
     async with engine.begin() as conn:
         await conn.run_sync(lambda sync_conn: Base.metadata.create_all(bind=sync_conn))
     bot_logger.info("Database tables created")
 
 async def on_startup():
-    """Run initialization tasks when the bot starts."""
     await init_db()  # Создание таблиц
     admin_id = settings.admin.ADMIN_IDS[0]  # Берем первый ID из списка
     await add_admin(telegram_id=admin_id, username=settings.admin.ADMIN_USERNAME)  # Добавляем админа
@@ -45,7 +43,6 @@ async def start_server(host: str, port: int):
 async def run_app():
     await asyncio.gather(
         start_bot(),
-        # start_server(settings.server.SERVER_HOST, settings.server.SERVER_PORT),
     )
 
 if __name__ == "__main__":

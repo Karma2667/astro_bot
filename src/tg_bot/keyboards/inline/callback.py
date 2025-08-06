@@ -57,6 +57,7 @@ class EventsCallback:
 class NumerologyCallback:
     START_ANGEL = "num_angel_start"
     START_BIRTHDATE_ANGEL = "num_birthdate_angel_start"
+    START_MATRIX = "num_matrix_start"
 
 
 class SubscriptionCallback:

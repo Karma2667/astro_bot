@@ -1,5 +1,5 @@
-# keyboards/reply/common.py
-from aiogram.utils.i18n import gettext as __ # type: ignore # <-- Переименовали импорт
+
+from aiogram.utils.i18n import gettext as __ # type: ignore 
 from aiogram.utils.keyboard import ReplyKeyboardMarkup, KeyboardButton # type: ignore
 
 
@@ -10,6 +10,7 @@ async def get_menu_reply(locale: str = None) -> ReplyKeyboardMarkup:
     taro_text = __("taro_btn", locale=locale) if locale else __("taro_btn")
     angel_numbers_text = __("angel_numbers_btn", locale=locale) if locale else __("angel_numbers_btn")
     help_text = __("help_btn", locale=locale) if locale else __("help_btn")
+    numerology_matrix_text = __("numerology_matrix_btn", locale=locale) if locale else __("numerology_matrix_btn")
     
     keyboard_buttons = [
         [
@@ -21,6 +22,9 @@ async def get_menu_reply(locale: str = None) -> ReplyKeyboardMarkup:
             KeyboardButton(text=taro_text),
         ],
         [
+            KeyboardButton(text=numerology_matrix_text), 
+        ],
+        [
             KeyboardButton(text=angel_numbers_text),
             KeyboardButton(text=help_text)
         ]
@@ -29,8 +33,7 @@ async def get_menu_reply(locale: str = None) -> ReplyKeyboardMarkup:
 
 
 async def get_decline_reply() -> ReplyKeyboardMarkup:
-    # Для кнопки "Отмена" используем контекстную локаль
-    keyboard_buttons = [[KeyboardButton(text=__("decline_btn"))]] # <-- Используем __
+    keyboard_buttons = [[KeyboardButton(text=__("decline_btn"))]] 
     return ReplyKeyboardMarkup(
         keyboard=keyboard_buttons, resize_keyboard=True, one_time_keyboard=True
     )

@@ -1,4 +1,3 @@
-# data/zodiac_signs.py
 from enum import Enum
 
 class ZodiacSigns(Enum):
@@ -15,7 +14,6 @@ class ZodiacSigns(Enum):
     AQUARIUS = "Aquarius"       # Водолей
     PISCES = "Pisces"           # Рыбы
 
-# Словарь для проверки и нормализации ввода.
 VALID_ZODIAC_SIGNS_LOWER = {
     "овен": ZodiacSigns.ARIES.value,
     "телец": ZodiacSigns.TAURUS.value,

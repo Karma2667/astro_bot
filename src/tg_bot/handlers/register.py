@@ -19,7 +19,6 @@ from typing import Optional
 register_router = Router(name="register")
 
 
-# === ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОПРЕДЕЛЕНИЯ ЗНАКА ЗОДИАКА ===
 def get_zodiac_sign(birth_date: date) -> str:
     day = birth_date.day
     month = birth_date.month
