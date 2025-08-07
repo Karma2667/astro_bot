@@ -25,7 +25,7 @@ TAROT_DECK: Dict[str, CardInfo] = {
     "The Hierophant": CardInfo(name="The Hierophant", image_filename="05_hierofant.jpg", suit=None),
     "The Lovers": CardInfo(name="The Lovers", image_filename="06_lovers.jpg", suit=None),
     "The Chariot": CardInfo(name="The Chariot", image_filename="07_chariot.jpg", suit=None),
-    "The Strength": CardInfo(name="The Strength", image_filename="08_Strenghch.jpg", suit=None),
+    "The Strength": CardInfo(name="The Strength", image_filename="08_strenghch.jpg", suit=None),
     "The Hermit": CardInfo(name="The Hermit", image_filename="09_hermit.jpg", suit=None),
     "The Wheel of Fortune": CardInfo(name="The Wheel of Fortune", image_filename="10_fortune.jpg", suit=None),
     "The Justice": CardInfo(name="The Justice", image_filename="11_justise.jpg", suit=None),

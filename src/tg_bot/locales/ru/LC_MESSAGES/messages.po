@@ -474,3 +474,27 @@ msgstr "Имя"
 
 msgid "feature_not_available_for_free_msg"
 msgstr "Эта функция недоступна с бесплатной подпиской. Приобретите подписку для доступа."
+
+msgid "daily_limit_reached_msg"
+msgstr "Дневной лимит исчерпан"
+
+msgid "error_generating_prediction_msg"
+msgstr "Ошибка при генерации предсказания. Пожалуйста, попробуйте позже."
+
+msgid "send_date_msg"
+msgstr "Введите дату (ДД.ММ.ГГГГ):"
+
+msgid "feature_not_available_on_plan"
+msgstr "Функция недоступна на вашем тарифе."
+
+msgid "feature_not_available_on_plan_msg"
+msgstr "Эта функция недоступна в вашем тарифе. Приобретите подписку для доступа."
+
+msgid "duration_tomorrow_btn"
+msgstr "Завтра"
+
+msgid "duration_pick_date_btn"
+msgstr "Выбрать дату"
+
+msgid "ask_birth_date_msg"
+msgstr "Введите вашу дату рождения (ДД.ММ.ГГГГ):"

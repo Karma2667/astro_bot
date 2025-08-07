@@ -11,7 +11,6 @@ from gpt.gpt import send_gpt_request
 from database.user.service import find_user_by_id
 from database.predictions.models import Prediction, PredictionType
 from database.predictions.service import create_prediction, find_prediction_by_recognition_and_type
-from database.user.service import find_user_by_id
 from database.profile.service import find_current_profile_by_user_id 
 from handlers.events import CompatibilityStates, make_compatibility
 from logger import bot_logger
@@ -22,6 +21,9 @@ from handlers.events import make_compatibility
 from data.tarot_deck import draw_random_cards, get_card_image_path, get_card_info
 from aiogram.types import BufferedInputFile # type: ignore 
 import os
+from datetime import date # type: ignore
+from constants.features import FEATURE_TARO, get_limit_for_feature 
+from database.usage.service import get_user_usage 
 
 taro_router = Router(name="taro")
 
@@ -31,7 +33,33 @@ TELEGRAM_CAPTION_LIMIT = 1024
 
 @taro_router.message(lambda msg: msg.text and msg.text == __("taro_btn"))
 async def handle_taro_menu_button(message: Message, state: FSMContext):
+    """Обработчик нажатия кнопки 'Таро' в главном меню."""
     bot_logger.info(f"User {message.from_user.id} pressed 'Taro' button from main menu")
+    
+    user_id = message.from_user.id
+    
+    # --- НОВОЕ: Проверка лимита ---
+    # 1. Получаем пользователя для определения подписки
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(text=__("error_msg"), reply_markup=await get_menu_reply())
+        return
+
+    # 2. Определяем лимит для функции FEATURE_TARO и текущей подписки
+    # Предполагается, что user.subscription.value возвращает строку, например, "freely"
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_TARO) # <-- Используем FEATURE_TARO
+
+    # 3. Если функция недоступна (лимит 0 или меньше)
+    if limit <= 0: # Для подписки freely limit будет 0
+        await message.answer(
+            text=__("feature_not_available_on_plan_msg"), # "Эта функция недоступна в вашем тарифе. Приобретите подписку для доступа."
+            reply_markup=await get_menu_reply()
+        )
+        return # Останавливаем выполнение хендлера
+    # --- НОВОЕ: Конец проверки лимита ---
+    
+    # Если лимит > 0, продолжаем как обычно
     await handle_taro_cmd(message, state)
 
 @taro_router.message(Command("taro"))

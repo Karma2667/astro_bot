@@ -1,4 +1,4 @@
-# handlers/numerology.py
+import traceback
 import re
 from aiogram import Router, F # type: ignore
 from aiogram.filters import Command # type: ignore
@@ -21,6 +21,10 @@ from database.predictions.service import (
     create_prediction,
     find_prediction_by_recognition_and_type,
 )
+from datetime import date, datetime
+from constants.features import FEATURE_ANGEL_NUMBERS, get_limit_for_feature, FEATURE_NUMEROLOGY_MATRIX
+from database.usage.service import get_user_usage, increment_user_usage 
+from database.user.service import find_user_by_id 
 
 numerology_router = Router(name="numerology")
 
@@ -56,6 +60,7 @@ async def make_angel_numbers(user_id: int, numbers_str: str = None, birthdate_an
     if numbers_str and not validated_numbers:
          bot_logger.error(f"[Angel Numbers] No valid numbers found in input '{numbers_str}' for user {user_id}.")
          return _("invalid_numbers_msg")
+         
     cache_parts = []
     if validated_numbers:
         cache_parts.append('_'.join(validated_numbers))
@@ -64,13 +69,15 @@ async def make_angel_numbers(user_id: int, numbers_str: str = None, birthdate_an
     
     if not cache_parts:
         bot_logger.error(f"[Angel Numbers] No numbers provided for user {user_id}.")
-        return _("invalid_numbers_msg") # Или другое сообщение об ошибке
+        return _("invalid_numbers_msg")
         
     cache_key = f"angel_nums_{'_'.join(cache_parts)}_{user.locale}"
+    
     db_result = await find_prediction_by_recognition_and_type(
         recognition_str=cache_key, prediction_type=PredictionType.ANGEL_NUMBERS
     )
-    if db_result:
+    
+    if db_result and db_result.prediction:
         bot_logger.info(f"[Angel Numbers] Found in DB for key: {cache_key}")
         return await format_numerology_result(sub=user.subscription, text=db_result.prediction)
    
@@ -83,6 +90,7 @@ async def make_angel_numbers(user_id: int, numbers_str: str = None, birthdate_an
     except Exception as e:
         bot_logger.error(f"[Angel Numbers] Error loading template: {e}", exc_info=True)
         return _("error_msg")
+
     descriptions = []
     if validated_numbers:
         descriptions.append(f"- Последовательность чисел, замеченная пользователем: {', '.join(validated_numbers)}")
@@ -93,6 +101,7 @@ async def make_angel_numbers(user_id: int, numbers_str: str = None, birthdate_an
 
     prompt = template.format(data_description=data_description)
     bot_logger.debug(f"[Angel Numbers] Prepared prompt (len={len(prompt)}). First 150 chars: '{prompt[:150]}...'")
+    
     try:
         response = await send_gpt_request(prompt=prompt)
         bot_logger.info(f"[Angel Numbers] GPT API call completed. Response is None/Empty: {not response or not response.strip()}")
@@ -105,13 +114,21 @@ async def make_angel_numbers(user_id: int, numbers_str: str = None, birthdate_an
         return _("error_msg")
 
     result_text = response.strip()
+    
     try:
         from database.profile.service import find_current_profile_by_user_id
         user_profile = await find_current_profile_by_user_id(user_id=user_id)
         profile_id_to_use = user_profile.id if user_profile else None
 
         if profile_id_to_use:
-            await create_prediction(Prediction(..., prediction_type=PredictionType.ANGEL_NUMBERS.value))
+            await create_prediction(
+                Prediction(
+                    profile_id=profile_id_to_use,
+                    prediction=result_text,
+                    prediction_type=PredictionType.ANGEL_NUMBERS.value,
+                    recognition_str=cache_key,
+                )
+            )
             bot_logger.info(f"[Angel Numbers] Prediction saved to DB for key: {cache_key}")
         else:
              bot_logger.info(f"[Angel Numbers] No profile ID, result not saved to DB for key: {cache_key}")
@@ -150,23 +167,6 @@ async def handle_angel_numbers_menu_button(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} pressed 'Angel Numbers' button from main menu")
     await _ask_for_angel_numbers(message, state)
 
-@numerology_router.message(AngelNumbersStates.waiting_for_numbers)
-async def handle_angel_numbers_input(message: Message, state: FSMContext):
-    bot_logger.info(f"User {message.from_user.id} sending angel numbers: {message.text}")
-    if message.text and re.match(r"^[\d\s]+$", message.text.strip()):
-        wait_msg = await message.answer(text=_("wait_calc_msg"))
-        try:
-            result = await make_angel_numbers(user_id=message.from_user.id, numbers_str=message.text)
-            await wait_msg.delete()
-            await message.answer(text=result, reply_markup=await get_menu_reply())
-        except Exception as e:
-            bot_logger.error(f"Error in handle_angel_numbers (generation) for user {message.from_user.id}: {e}", exc_info=True)
-            await wait_msg.delete()
-            await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
-        finally:
-            await state.clear()
-    else:
-        await message.answer(text=_("invalid_numbers_msg"), reply_markup=await get_decline_reply())
 
 def calculate_angel_number_from_date(birth_date_str: str) -> str:
     try:
@@ -212,14 +212,47 @@ async def handle_start_birthdate_angel_callback(callback: CallbackQuery, state: 
 @numerology_router.message(AngelNumbersStates.waiting_for_numbers)
 async def handle_angel_numbers_input(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} sending angel numbers: {message.text}")
+    
+    user_id = message.from_user.id # <-- Получаем user_id заранее
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+        await state.clear()
+        return
+
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_ANGEL_NUMBERS)
+
+    if limit > 0:
+        today = date.today()
+        usage_record = await get_user_usage(user_id, FEATURE_ANGEL_NUMBERS, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+
+        if current_usage >= limit:
+            await message.answer(
+                text=_("daily_limit_reached_msg"), # "Дневной лимит для этой функции исчерпан..."
+                reply_markup=await get_menu_reply()
+            )
+            await state.clear()
+            return # Останавливаем выполнение хендлера
+    
     if message.text and re.match(r"^[\d\s]+$", message.text.strip()):
         wait_msg = await message.answer(text=_("wait_calc_msg"))
         try:
-            result = await make_angel_numbers(user_id=message.from_user.id, numbers_str=message.text)
+            result = await make_angel_numbers(user_id=user_id, numbers_str=message.text)
             await wait_msg.delete()
             await message.answer(text=result, reply_markup=await get_menu_reply())
+            
+            sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+            limit = get_limit_for_feature(sub_name, FEATURE_ANGEL_NUMBERS)
+
+            if limit > 0: # Увеличиваем только если функция лимитирована
+                today = date.today()
+                await increment_user_usage(user_id, FEATURE_ANGEL_NUMBERS, today)
+                bot_logger.info(f"Incremented usage count for user {user_id}, feature {FEATURE_ANGEL_NUMBERS}")
+            
         except Exception as e:
-            bot_logger.error(f"Error in handle_angel_numbers_input (generation) for user {message.from_user.id}: {e}", exc_info=True)
+            bot_logger.error(f"Error in handle_angel_numbers_input (generation) for user {user_id}: {e}", exc_info=True)
             await wait_msg.delete()
             await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
         finally:
@@ -227,9 +260,35 @@ async def handle_angel_numbers_input(message: Message, state: FSMContext):
     else:
         await message.answer(text=_("invalid_numbers_msg"), reply_markup=await get_decline_reply())
 
+
 @numerology_router.message(AngelNumbersStates.waiting_for_birthdate)
 async def handle_birthdate_for_angel_numbers(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} sending birthdate for angel numbers: {message.text}")
+    
+    user_id = message.from_user.id # <-- Получаем user_id заранее
+    
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+        await state.clear()
+        return
+
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_ANGEL_NUMBERS)
+
+    if limit > 0:
+        today = date.today()
+        usage_record = await get_user_usage(user_id, FEATURE_ANGEL_NUMBERS, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+
+        if current_usage >= limit:
+            await message.answer(
+                text=_("daily_limit_reached_msg"), # "Дневной лимит для этой функции исчерпан..."
+                reply_markup=await get_menu_reply()
+            )
+            await state.clear()
+            return # Останавливаем выполнение хендлера
+
     date_pattern = r"^\d{2}\.\d{2}\.\d{4}$"
     if message.text and re.match(date_pattern, message.text):
         try:
@@ -242,15 +301,24 @@ async def handle_birthdate_for_angel_numbers(message: Message, state: FSMContext
 
             wait_msg = await message.answer(text=_("wait_calc_msg"))
             try:
-                result = await make_angel_numbers(user_id=message.from_user.id, birthdate_angel_number=birthdate_angel_number)
+                result = await make_angel_numbers(user_id=user_id, birthdate_angel_number=birthdate_angel_number)
                 await wait_msg.delete()
                 await message.answer(text=result, reply_markup=await get_menu_reply())
+                
+                sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+                limit = get_limit_for_feature(sub_name, FEATURE_ANGEL_NUMBERS)
+
+                if limit > 0: # Увеличиваем только если функция лимитирована
+                    today = date.today()
+                    await increment_user_usage(user_id, FEATURE_ANGEL_NUMBERS, today)
+                    bot_logger.info(f"Incremented usage count for user {user_id}, feature {FEATURE_ANGEL_NUMBERS}")
+                
             except Exception as e:
-                bot_logger.error(f"Error in handle_birthdate_for_angel_numbers (generation) for user {message.from_user.id}: {e}", exc_info=True)
+                bot_logger.error(f"Error in handle_birthdate_for_angel_numbers (generation) for user {user_id}: {e}", exc_info=True)
                 await wait_msg.delete()
                 await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
             finally:
-                await state.clear()
+                await state.clear() # Всегда очищаем состояние в конце
 
         except ValueError:
             await message.answer(text=_("date_error_msg"), reply_markup=await get_decline_reply())
@@ -395,6 +463,23 @@ async def make_numerology_matrix(user_id: int, birth_date_str: str) -> str:
 @numerology_router.message(lambda msg: msg.text and msg.text == _("numerology_matrix_btn"))
 async def handle_numerology_matrix_menu_button(message: Message, state: FSMContext):
     bot_logger.info(f"User {message.from_user.id} pressed 'Numerology Matrix' button from main menu")
+    
+    user_id = message.from_user.id
+    
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+        return
+
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_NUMEROLOGY_MATRIX)
+
+    if limit <= 0: # Для подписки freely limit будет 0
+        await message.answer(
+            text=_("feature_not_available_on_plan_msg"), # "Эта функция недоступна в вашем тарифе. Приобретите подписку для доступа."
+            reply_markup=await get_menu_reply()
+        )
+        return # Останавливаем выполнение хендлера
     await message.answer(
         text=_("ask_birth_date_msg"), # "Введите вашу дату рождения (ДД.ММ.ГГГГ):"
         reply_markup=await get_decline_reply()

@@ -1,11 +1,11 @@
 import asyncio
-from aiogram import Router, F
-from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.utils.i18n import gettext as _
-from datetime import datetime, date, timedelta
+from aiogram import Router, F # type: ignore
+from aiogram.filters import Command, StateFilter # type: ignore
+from aiogram.types import Message, CallbackQuery # type: ignore
+from aiogram.fsm.context import FSMContext # type: ignore
+from aiogram.fsm.state import State, StatesGroup # type: ignore
+from aiogram.utils.i18n import gettext as _ # type: ignore
+from datetime import datetime, date, timedelta # type: ignore
 import re
 from database.user.service import find_user_by_id
 from logger import bot_logger
@@ -22,6 +22,10 @@ from database.profile.service import find_current_profile_by_user_id, create_pro
 from database.predictions.models import Prediction, PredictionType
 from database.predictions.service import create_prediction, find_prediction_by_recognition_and_type
 from database.db import async_session_maker
+from constants.features import FEATURE_EVENT_DIVINATION, get_limit_for_feature, FEATURE_COMPATIBILITY
+from database.usage.service import get_user_usage, increment_user_usage
+from datetime import date, timedelta
+
 
 
 class CompatibilityStates(StatesGroup):
@@ -147,13 +151,6 @@ async def make_event(user_id: int, theme: str, target_date: date) -> str:
         return await format_event(sub=user.subscription, event=response)
 
 async def make_compatibility(user_id: int, name1: str, name2: str) -> str:
-    """
-    Рассчитывает совместимость по двум именам.
-    :param user_id: ID пользователя
-    :param name1: Первое имя
-    :param name2: Второе имя
-    :return: Строка с результатом расчета
-    """
     bot_logger.info(f"make_compatibility called: user_id={user_id}, name1={name1}, name2={name2}")
     user = await find_user_by_id(user_id=user_id)
     if not user:
@@ -231,10 +228,39 @@ async def handle_event_cmd(message: Message, state: FSMContext):
     )
 
 async def handle_event_theme(callback: CallbackQuery, theme: str):
+    bot_logger.info(f"User {callback.from_user.id} selected event theme: {theme}")
+    user_id = callback.from_user.id
+
+
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await callback.answer(text=_("error_msg"), show_alert=True)
+        return
+
+
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_EVENT_DIVINATION)
+
+
+    if limit > 0:
+        today = date.today()
+        usage_record = await get_user_usage(user_id, FEATURE_EVENT_DIVINATION, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+
+        if current_usage >= limit:
+            # Лимит исчерпан
+            await callback.answer(
+                text=_("daily_limit_reached_msg"),
+                show_alert=True
+            )
+
+            return
+
     await callback.message.answer(
-        text=_("choose_date_msg"), 
+        text=_("choose_date_msg"),
         reply_markup=await get_date_selection_inline(theme=theme),
     )
+    await callback.answer()
 
 @event_router.callback_query(F.data.startswith(EventsCallback.STUDY))
 async def handle_study_callback(callback: CallbackQuery, state: FSMContext):
@@ -269,16 +295,30 @@ async def handle_success_callback(callback: CallbackQuery, state: FSMContext):
 @event_router.callback_query(F.data.startswith(EventsCallback.COMPATIBILITY))
 async def handle_compatibility_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} selected 'Compatibility'")
+
+    user_id = callback.from_user.id
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await callback.answer(text=_("error_msg"), show_alert=True)
+        return
+
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_COMPATIBILITY) # <-- Используем FEATURE_COMPATIBILITY
+
+    if limit <= 0: # Если лимит 0 или меньше
+        await callback.answer(
+            text=_("feature_not_available_on_plan"), # Нужно добавить этот перевод, например: "Функция недоступна на вашем тарифе."
+            show_alert=True
+        )
+        return # Останавливаем выполнение
     
     await callback.message.answer(
-        text=_("send_first_name_msg"),
-        reply_markup=await get_decline_reply() 
+        text=_("send_first_name_msg"), # "Введите первое имя:"
+        reply_markup=await get_decline_reply() # Или другая клавиатура, если нужно
     )
-    
-    await state.set_state(CompatibilityStates.waiting_for_first_name)
-    
-    await callback.answer()
 
+    await state.set_state(CompatibilityStates.waiting_for_first_name)
+    await callback.answer()
 
 @event_router.callback_query(F.data.startswith(EventsCallback.DURATION_TODAY))
 async def handle_duration_today_callback(callback: CallbackQuery, state: FSMContext):
@@ -287,19 +327,53 @@ async def handle_duration_today_callback(callback: CallbackQuery, state: FSMCont
     if len(data_parts) < 2:
         await callback.answer("Ошибка: неверные данные для 'Сегодня'.")
         return
-        
+
     theme = data_parts[1]
     target_date = date.today() # Получаем сегодняшнюю дату
-    
     user_id = callback.message.chat.id
+
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await callback.answer(text=_("error_msg"), show_alert=True)
+        return
+
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_EVENT_DIVINATION)
+
+    if limit > 0:
+        today = target_date # Используем дату события для лимита "в день"
+        usage_record = await get_user_usage(user_id, FEATURE_EVENT_DIVINATION, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+
+        if current_usage >= limit:
+
+            await callback.answer(
+                text=_("daily_limit_reached_msg"), 
+                show_alert=True
+            )
+            return
+
     wait_msg = await callback.message.answer(text=_("wait_calc_msg"))
-    
-    # Вызываем обновленную функцию make_event с объектом date
-    event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
-    
-    await wait_msg.delete()
-    await callback.message.answer(text=event_result, reply_markup=await get_menu_reply())
-    await callback.answer()
+    try:
+        event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
+
+        await wait_msg.delete()
+        await callback.message.answer(text=event_result, reply_markup=await get_menu_reply())
+
+        sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+        limit = get_limit_for_feature(sub_name, FEATURE_EVENT_DIVINATION)
+
+        if limit > 0: 
+            today = target_date # Используем дату события
+            await increment_user_usage(user_id, FEATURE_EVENT_DIVINATION, today)
+            bot_logger.info(f"Incremented usage count for user {user_id}, feature {FEATURE_EVENT_DIVINATION} for date {today}")
+
+    except Exception as e:
+        bot_logger.error(f"Error in handle_duration_today_callback for user {user_id}: {e}", exc_info=True)
+        await wait_msg.delete()
+        await callback.message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+    finally:
+        await callback.answer()
 
 @event_router.callback_query(F.data.startswith(EventsCallback.DURATION_TOMORROW))
 async def handle_duration_tomorrow_callback(callback: CallbackQuery, state: FSMContext):
@@ -308,18 +382,55 @@ async def handle_duration_tomorrow_callback(callback: CallbackQuery, state: FSMC
     if len(data_parts) < 2:
         await callback.answer("Ошибка: неверные данные для 'Завтра'.")
         return
-        
+
     theme = data_parts[1]
     target_date = date.today() + timedelta(days=1) # Получаем завтрашнюю дату
-    
     user_id = callback.message.chat.id
+
+
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await callback.answer(text=_("error_msg"), show_alert=True)
+        return
+
+
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_EVENT_DIVINATION)
+
+    if limit > 0:
+        today = target_date # Используем дату события для лимита "в день"
+        usage_record = await get_user_usage(user_id, FEATURE_EVENT_DIVINATION, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+
+        if current_usage >= limit:
+            await callback.answer(
+                text=_("daily_limit_reached_msg"),
+                show_alert=True
+            )
+
+            return
+
     wait_msg = await callback.message.answer(text=_("wait_calc_msg"))
-    
-    event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
-    
-    await wait_msg.delete()
-    await callback.message.answer(text=event_result, reply_markup=await get_menu_reply())
-    await callback.answer()
+    try:
+        event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
+
+        await wait_msg.delete()
+        await callback.message.answer(text=event_result, reply_markup=await get_menu_reply())
+
+        sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+        limit = get_limit_for_feature(sub_name, FEATURE_EVENT_DIVINATION)
+
+        if limit > 0: 
+            today = target_date 
+            await increment_user_usage(user_id, FEATURE_EVENT_DIVINATION, today)
+            bot_logger.info(f"Incremented usage count for user {user_id}, feature {FEATURE_EVENT_DIVINATION} for date {today}")
+
+    except Exception as e:
+        bot_logger.error(f"Error in handle_duration_tomorrow_callback for user {user_id}: {e}", exc_info=True)
+        await wait_msg.delete()
+        await callback.message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+    finally:
+        await callback.answer()
 
 @event_router.callback_query(F.data.startswith(EventsCallback.DURATION_PICK_DATE))
 async def handle_duration_pick_date_callback(callback: CallbackQuery, state: FSMContext):
@@ -328,14 +439,16 @@ async def handle_duration_pick_date_callback(callback: CallbackQuery, state: FSM
     if len(data_parts) < 2:
         await callback.answer("Ошибка: неверные данные для 'Выбрать дату'.")
         return
-        
+
     theme = data_parts[1]
+    
+    user_id = callback.from_user.id
     await state.set_state(EventStates.waiting_for_custom_date)
     await state.update_data(theme=theme)
-    
+
     await callback.message.answer(
-        text=_("send_date_msg"),
-        reply_markup=None 
+        text=_("send_date_msg"), 
+        reply_markup=None
     )
     await callback.answer()
 
@@ -372,28 +485,89 @@ async def handle_first_name_input(message: Message, state: FSMContext):
         
 @event_router.message(StateFilter(CompatibilityStates.waiting_for_second_name))
 async def handle_second_name_input(message: Message, state: FSMContext):
+    """Обработчик ввода второго имени для гадания на совместимость по именам."""
     bot_logger.info(f"User {message.from_user.id} entered second name: {message.text}")
     
     if not message.text or len(message.text.strip()) < 2:
-        await message.answer(text=_("invalid_name_msg")) # Добавь этот перевод
-        return
+        await message.answer(text=_("invalid_name_msg")) # "Имя должно содержать не менее 2 символов."
+        return # Не очищаем состояние, даем пользователю попробовать снова
 
     user_data = await state.get_data()
     first_name = user_data.get('first_name')
-    second_name = message.text.strip()
     
+    # Проверка наличия первого имени в состоянии (на всякий случай)
+    if not first_name:
+        bot_logger.error(f"User {message.from_user.id} entered second name without first name in state.")
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply()) # "Произошла ошибка..."
+        await state.clear()
+        return
+
+    second_name = message.text.strip()
     user_id = message.from_user.id
 
-    wait_msg = await message.answer(text=_("wait_calc_msg"))
-    
-    compatibility_result = await make_compatibility(user_id=user_id, name1=first_name, name2=second_name)
-    
-    await wait_msg.delete()
-    
-    await message.answer(text=compatibility_result, reply_markup=await get_menu_reply())
-    
-    await state.clear()
+    # --- НОВОЕ: Проверка лимита ---
+    # 1. Получаем пользователя для определения подписки
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+        await state.clear()
+        return
 
+    # 2. Определяем лимит для функции FEATURE_COMPATIBILITY и текущей подписки
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_COMPATIBILITY)
+
+    # 3. Если функция доступна (лимит > 0), проверяем текущее использование
+    if limit > 0:
+        today = date.today()
+        usage_record = await get_user_usage(user_id, FEATURE_COMPATIBILITY, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+
+        if current_usage >= limit:
+            # Лимит исчерпан
+            await message.answer(
+                text=_("daily_limit_reached_msg"), # "Дневной лимит для этой функции исчерпан..."
+                reply_markup=await get_menu_reply()
+            )
+            await state.clear()
+            return # Останавливаем выполнение хендлера
+    # Если limit == 0, функция недоступна. Но проверка лимита должна была быть в handle_compatibility_callback.
+    # Добавим дополнительную проверку на случай, если логика изменилась.
+    elif limit <= 0:
+         await message.answer(
+            text=_("feature_not_available_on_plan_msg"), # "Эта функция недоступна в вашем тарифе..."
+            reply_markup=await get_menu_reply()
+        )
+         await state.clear()
+         return
+    # --- НОВОЕ: Конец проверки лимита ---
+
+    wait_msg = await message.answer(text=_("wait_calc_msg")) # "Производим расчет! ⌛..."
+    
+    try:
+        compatibility_result = await make_compatibility(user_id=user_id, name1=first_name, name2=second_name)
+        
+        await wait_msg.delete()
+        await message.answer(text=compatibility_result, reply_markup=await get_menu_reply())
+        
+        # --- НОВОЕ: Увеличиваем счётчик после успешной отправки ---
+        # Повторно определяем лимит и пользователя (можно оптимизировать, сохранив выше)
+        # user = await find_user_by_id(user_id=user_id) # Уже есть выше
+        sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+        limit = get_limit_for_feature(sub_name, FEATURE_COMPATIBILITY)
+
+        if limit > 0: # Увеличиваем только если функция лимитирована
+            today = date.today()
+            await increment_user_usage(user_id, FEATURE_COMPATIBILITY, today)
+            bot_logger.info(f"Incremented usage count for user {user_id}, feature {FEATURE_COMPATIBILITY}")
+        # --- НОВОЕ: Конец увеличения счётчика ---
+        
+    except Exception as e:
+        bot_logger.error(f"Error in handle_second_name_input (compatibility generation) for user {user_id}: {e}", exc_info=True)
+        await wait_msg.delete()
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply()) # "Произошла ошибка..."
+    finally:
+        await state.clear() # Всегда очищаем состояние в конце
 
 @event_router.message(StateFilter(EventStates.waiting_for_custom_date))
 async def handle_user_custom_date_input(message: Message, state: FSMContext):
@@ -417,22 +591,52 @@ async def handle_user_custom_date_input(message: Message, state: FSMContext):
         
         if target_date < date(1900, 1, 1) or target_date > date(2100, 12, 31):
              await message.answer("Пожалуйста, введите корректную дату между 01.01.1900 и 31.12.2100.")
-             return # Не очищаем состояние
+             return
             
     except ValueError:
         await message.answer(text=_("date_error_msg"))
         return
 
     user_id = message.from_user.id
+    
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+        await state.clear()
+        return
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_EVENT_DIVINATION)
+
+    if limit > 0:
+        usage_record = await get_user_usage(user_id, FEATURE_EVENT_DIVINATION, target_date)
+        current_usage = usage_record.usage_count if usage_record else 0
+
+        if current_usage >= limit:
+            await message.answer(
+                text=_("daily_limit_reached_msg"), # "Дневной лимит для этой функции исчерпан..."
+                reply_markup=await get_menu_reply()
+            )
+            await state.clear()
+            return # Останавливаем выполнение хендлера
+    
     wait_msg = await message.answer(text=_("wait_calc_msg"))
     
-    event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
-    
-    await wait_msg.delete()
-    await message.answer(text=event_result, reply_markup=await get_menu_reply())
-    await state.clear() # Очищаем состояние FSM после успешного расчета
+    try:
+        event_result = await make_event(user_id=user_id, theme=theme, target_date=target_date)
+        
+        await wait_msg.delete()
+        await message.answer(text=event_result, reply_markup=await get_menu_reply())
+        
+        sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+        limit = get_limit_for_feature(sub_name, FEATURE_EVENT_DIVINATION)
 
-@event_router.message(lambda msg: msg.text == "🔮 Таро")
-async def handle_taro_menu_button(message: Message, state: FSMContext):
-    bot_logger.info(f"User {message.from_user.id} pressed 'Taro' button from main menu")
-    await handle_taro_cmd(message, state)
+        if limit > 0: # Увеличиваем только если функция лимитирована
+            await increment_user_usage(user_id, FEATURE_EVENT_DIVINATION, target_date)
+            bot_logger.info(f"Incremented usage count for user {user_id}, feature {FEATURE_EVENT_DIVINATION} for custom date {target_date}")
+        
+    except Exception as e:
+        bot_logger.error(f"Error in handle_user_custom_date_input (event generation) for user {user_id}: {e}", exc_info=True)
+        await wait_msg.delete()
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+    finally:
+        await state.clear() 

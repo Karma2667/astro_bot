@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext # type: ignore
 from aiogram.utils.i18n import gettext as _ # type: ignore
 
 import re
-from datetime import datetime
+from datetime import datetime, date
 
 from logger import bot_logger
 from states.horoscope import DateState, CompatibilitySignsState
@@ -18,6 +18,7 @@ from keyboards.inline.horoscope import (
     get_subscribe_inline,
     get_unsubscribe_inline,
 )
+from constants.features import FEATURE_DAILY_HOROSCOPE, get_limit_for_feature
 from data.zodiac_signs import VALID_ZODIAC_SIGNS_LOWER
 from gpt.template import load_template, inject_profile_into_template, TemplateType
 from gpt.gpt import send_gpt_request
@@ -30,6 +31,8 @@ from database.predictions.service import (
     create_prediction,
     find_prediction_by_recognition_and_type,
 )
+from database.usage.service import get_user_usage, increment_user_usage
+from constants.features import FEATURE_DAILY_HOROSCOPE, get_limit_for_feature,FEATURE_ZODIAC_COMPATIBILITY
 
 horoscope_router = Router(name="horoscope")
 
@@ -150,11 +153,45 @@ async def handle_horoscope_cmd(message: Message, state: FSMContext):
 @horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.TODAY))
 async def handle_today_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} using callback {callback.data}")
+    
+    user_id = callback.from_user.id
+    
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await callback.answer(text=_("error_msg"), show_alert=True)
+        return
+
+    sub_name = user.subscription.value if user.subscription else "freely" # На случай, если subscription None
+    limit = get_limit_for_feature(sub_name, FEATURE_DAILY_HOROSCOPE)
+    
+    if limit > 0:
+        today = date.today()
+        usage_record = await get_user_usage(user_id, FEATURE_DAILY_HOROSCOPE, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+        
+        if current_usage >= limit:
+            await callback.answer(
+                text=_("daily_limit_reached_msg"), # "Дневной лимит для этой функции исчерпан. Приобретите подписку для снятия ограничений."
+                show_alert=True
+            )
+            return 
     wait_msg = await callback.message.answer(text=_("wait_calc_msg"))
-    horoscope = await make_horoscope(user_id=callback.from_user.id, date="today") 
-    await wait_msg.delete()
-    await callback.message.answer(text=horoscope, reply_markup=await get_menu_reply())
-    await callback.answer()
+    try:
+        horoscope = await make_horoscope(user_id=callback.message.chat.id, date="today")
+        await wait_msg.delete()
+        await callback.message.answer(text=horoscope, reply_markup=await get_menu_reply())
+    
+        if limit > 0:
+            today = date.today()
+            await increment_user_usage(user_id, FEATURE_DAILY_HOROSCOPE, today)
+        
+    except Exception as e:
+        bot_logger.error(f"Error in handle_today_callback for user {user_id}: {e}", exc_info=True)
+        await wait_msg.delete()
+        await callback.message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+    finally:
+        await callback.answer()
+    
 
 @horoscope_router.callback_query(F.data.startswith(HoroscopeCallback.MONTH))
 async def handle_month_callback(callback: CallbackQuery, state: FSMContext):
@@ -206,8 +243,8 @@ async def handle_date(message: Message, state: FSMContext):
     else:
         await message.answer(text=_("date_error_msg"), reply_markup=await get_decline_reply())
 
-async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str) -> str:
-    bot_logger.info(f"[Zodiac Compatibility] make_zodiac_compatibility called: sign1='{sign1_key}', sign2='{sign2_key}', locale='{locale}'")
+async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str, user_profile_id: int) -> str:
+    bot_logger.info(f"[Zodiac Compatibility] make_zodiac_compatibility called: sign1='{sign1_key}', sign2='{sign2_key}', locale='{locale}', profile_id={user_profile_id}")
 
     if sign1_key not in VALID_ZODIAC_SIGNS_LOWER or sign2_key not in VALID_ZODIAC_SIGNS_LOWER:
         bot_logger.error(f"[Zodiac Compatibility] Invalid sign keys provided: '{sign1_key}', '{sign2_key}'")
@@ -217,12 +254,13 @@ async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str)
     original_sign2 = VALID_ZODIAC_SIGNS_LOWER[sign2_key]
 
     sorted_signs = sorted([original_sign1, original_sign2])
-    cache_key = f"zcompat_{sorted_signs[0]}_{sorted_signs[1]}_{locale}"
+    cache_key = f"zcompat_{sorted_signs[0]}_{sorted_signs[1]}_{locale}_{user_profile_id}"
     
-    prediction_type_for_db = PredictionType.ZODIAC_COMPATIBILITY # <-- Используем правильный тип
+    prediction_type_for_db = PredictionType.ZODIAC_COMPATIBILITY 
+
     try:
         db_result = await find_prediction_by_recognition_and_type(
-            recognition_str=cache_key, prediction_type=prediction_type_for_db # <-- Передаем Enum
+            recognition_str=cache_key, prediction_type=prediction_type_for_db
         )
         if db_result:
             bot_logger.info(f"[Zodiac Compatibility] Found in DB for key: {cache_key}")
@@ -235,18 +273,18 @@ async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str)
     try:
         template = await load_template(
             locale=locale,
-            template_type=TemplateType.ZODIAC_COMPATIBILITY # Убедитесь, что такой тип шаблона определен
+            template_type=TemplateType.FREE_ZODIAC_COMPATIBILITY # <-- Убедитесь, что это правильный тип
         )
     except Exception as e:
         bot_logger.error(f"[Zodiac Compatibility] Error loading template: {e}", exc_info=True)
         return _("error_generating_prediction_msg")
-
+    
     translated_sign1 = _(original_sign1.lower().replace(" ", "_"))
     translated_sign2 = _(original_sign2.lower().replace(" ", "_"))
 
     prompt = template.format(sign1=translated_sign1, sign2=translated_sign2)
     bot_logger.debug(f"[Zodiac Compatibility] Prepared prompt (len={len(prompt)}). First 150 chars: '{prompt[:150]}...'")
-
+    
     try:
         response = await send_gpt_request(prompt=prompt)
         bot_logger.info(f"[Zodiac Compatibility] GPT API call completed. Response is None/Empty: {not response or not response.strip()}")
@@ -260,11 +298,21 @@ async def make_zodiac_compatibility(sign1_key: str, sign2_key: str, locale: str)
 
     response_text = response.strip()
 
+    try:
+        await create_prediction(
+            Prediction(
+                profile_id=user_profile_id, 
+                prediction=response_text,
+                prediction_type=prediction_type_for_db, 
+                recognition_str=cache_key,
+            )
+        )
+        bot_logger.info(f"[Zodiac Compatibility] Prediction saved to DB for key: {cache_key}")
+    except Exception as e:
+        bot_logger.error(f"[Zodiac Compatibility] Error saving to DB for key {cache_key}: {e}", exc_info=True)
 
-    bot_logger.info(f"[Zodiac Compatibility] Generated text (not cached in DB due to missing profile_id logic): {response_text[:100]}...")
 
     return response_text
-
 @horoscope_router.callback_query(F.data == HoroscopeCallback.ZODIAC_COMPATIBILITY_START)
 async def handle_zodiac_compatibility_start_callback(callback: CallbackQuery, state: FSMContext):
     bot_logger.info(f"User {callback.from_user.id} started zodiac compatibility process.")
@@ -302,25 +350,61 @@ async def handle_second_zodiac_sign(message: Message, state: FSMContext):
         return
 
     raw_sign2 = message.text.strip().lower() if message.text else ""
-    
     second_sign_key = raw_sign2 # Сохраняем системное имя второго знака
 
-    user = await find_user_by_id(user_id=message.from_user.id)
-    user_locale = user.locale if user else "ru" # По умолчанию 'ru'
+    user_id = message.from_user.id
+    user = await find_user_by_id(user_id=user_id)
+    if not user:
+        await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+        await state.clear()
+        return
 
+    user_locale = user.locale if user else "ru" # По умолчанию 'ru'
+    
+    sub_name = user.subscription.value if hasattr(user.subscription, 'value') else (user.subscription.name.lower() if user.subscription else "freely")
+    limit = get_limit_for_feature(sub_name, FEATURE_ZODIAC_COMPATIBILITY)
+    
+    limit_check_passed = True
+    if limit > 0:
+        today = date.today()
+        usage_record = await get_user_usage(user_id, FEATURE_ZODIAC_COMPATIBILITY, today)
+        current_usage = usage_record.usage_count if usage_record else 0
+        
+        if current_usage >= limit:
+            await message.answer(
+                text=_("daily_limit_reached_msg"), # "Дневной лимит для этой функции исчерпан..."
+                reply_markup=await get_menu_reply()
+            )
+            await state.clear()
+            return # Останавливаем выполнение
+    
     wait_msg = await message.answer(text=_("wait_calc_msg"))
     try:
+        user_profile = await find_current_profile_by_user_id(user_id=user_id)
+        if not user_profile:
+             bot_logger.error(f"[Zodiac Compatibility] User profile not found for user {user_id}.")
+             await wait_msg.delete()
+             await message.answer(text=_("error_msg"), reply_markup=await get_menu_reply())
+             await state.clear()
+             return
+
         compatibility_text = await make_zodiac_compatibility(
             sign1_key=first_sign_key, 
             sign2_key=second_sign_key, 
-            locale=user_locale
+            locale=user_locale,
+            user_profile_id=user_profile.id # <-- Передаем ID профиля
         )
         
         await wait_msg.delete()
         await message.answer(text=compatibility_text, reply_markup=await get_menu_reply())
         
+        if limit > 0: # Увеличиваем только если функция лимитирована
+            today = date.today() # Убедимся, что today определена
+            await increment_user_usage(user_id, FEATURE_ZODIAC_COMPATIBILITY, today)
+            bot_logger.info(f"Incremented usage count for user {user_id}, feature {FEATURE_ZODIAC_COMPATIBILITY}")
+        
     except Exception as e:
-        bot_logger.error(f"Error in handle_second_zodiac_sign (compatibility generation) for user {message.from_user.id}: {e}", exc_info=True)
+        bot_logger.error(f"Error in handle_second_zodiac_sign (compatibility generation) for user {user_id}: {e}", exc_info=True)
         await wait_msg.delete()
         await message.answer(text=_("error_generating_prediction_msg"), reply_markup=await get_menu_reply())
     finally:

@@ -68,10 +68,10 @@ async def send_gpt_request(prompt: str) -> Optional[str]:
         bot_logger.error(f"!!! EXCEPTION in send_gpt_request (StopCandidateException): {e}", exc_info=True)
         return None
     except Exception as e:
-        Ъbot_logger.error(f"!!! EXCEPTION in send_gpt_request: {type(e).__name__}: {e}", exc_info=True)
+        bot_logger.error(f"!!! EXCEPTION in send_gpt_request: {type(e).__name__}: {e}", exc_info=True)
         return None
     finally:
-        Ъbot_logger.info("--- [END] Exiting send_gpt_request ---")
+        bot_logger.info("--- [END] Exiting send_gpt_request ---")
 
 async def inject_names_into_template(name1: str, name2: str, template: str) -> str:
     return template.format(name1=name1, name2=name2)
